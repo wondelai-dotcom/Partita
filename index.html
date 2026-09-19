@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prepartita — Analisi calcio con probabilità in tempo reale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF1F4; --card:#FFFFFF; --ink:#101B2B; --muted:#5B677A;
+  --home:#1B7F4E; --away:#E4631F; --draw:#9AA5B5; --line:#D3DAE3; --focus:#1F5FD1;
+  --display:'Barlow Condensed','Arial Narrow',Impact,sans-serif;
+  --body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1520; --card:#162131; --ink:#E8EDF4; --muted:#93A0B4;
+    --home:#3CC489; --away:#FF8A4C; --draw:#6B788C; --line:#26344A; --focus:#7FB0FF;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1520; --card:#162131; --ink:#E8EDF4; --muted:#93A0B4;
+  --home:#3CC489; --away:#FF8A4C; --draw:#6B788C; --line:#26344A; --focus:#7FB0FF;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 18px 56px}
+header.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:14px;border-bottom:2px solid var(--ink)}
+.brand{font-family:var(--display);font-weight:700;font-size:30px;letter-spacing:.01em;line-height:1}
+.notice{font-size:14px;color:var(--muted);max-width:46ch}
+h2{font-family:var(--display);font-weight:600;font-size:26px;margin:0 0 10px;line-height:1.1}
+h3{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 8px}
+
+/* Hero */
+.hero{padding:28px 0 8px}
+.pickers{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:end}
+.pick label{display:block;font-size:14px;color:var(--muted);margin-bottom:4px}
+.pick select{width:100%;font-family:var(--display);font-weight:700;font-size:clamp(28px,6vw,52px);line-height:1.1;color:var(--ink);background:var(--card);border:2px solid var(--ink);border-radius:8px;padding:6px 10px;appearance:none;cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);
+  background-position:calc(100% - 20px) 55%,calc(100% - 14px) 55%;background-size:6px 6px;background-repeat:no-repeat}
+.pick.h select{border-color:var(--home)} .pick.a select{border-color:var(--away)}
+.swap{font:600 15px var(--body);color:var(--ink);background:transparent;border:2px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;height:fit-content;margin-bottom:6px}
+.swap:hover{border-color:var(--ink)}
+.bar{display:flex;height:34px;border-radius:6px;overflow:hidden;margin-top:26px;background:var(--line)}
+.bar div{transition:width .35s ease;min-width:2px}
+.bar .bh{background:var(--home)} .bar .bd{background:var(--draw)} .bar .ba{background:var(--away)}
+.nums{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.num .v{font-family:var(--display);font-weight:700;font-size:clamp(44px,10vw,84px);line-height:.95}
+.num .l{font-size:14px;color:var(--muted)}
+.num.h .v{color:var(--home)} .num.a{text-align:right} .num.a .v{color:var(--away)} .num.d{text-align:center}
+.summary{font-size:18px;max-width:64ch;margin:16px 0 8px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.btn{font:600 15px var(--body);border:2px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:8px;padding:9px 14px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink)}
+
+/* Layout */
+.grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:22px;margin-top:26px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+.panel+.panel{margin-top:22px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.team-col h3{display:flex;align-items:center;gap:8px}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+.chips{display:flex;gap:6px;margin:6px 0 14px}
+.chip{width:38px;height:38px;border-radius:8px;border:2px solid var(--line);background:transparent;font:700 16px var(--display);color:var(--ink);cursor:pointer}
+.chip.V{background:var(--home);border-color:var(--home);color:#fff}
+.chip.N{background:var(--draw);border-color:var(--draw);color:#fff}
+.chip.P{background:var(--away);border-color:var(--away);color:#fff}
+.field{font-size:14px;color:var(--muted);display:block}
+.stepper{display:flex;align-items:center;gap:10px;margin:6px 0 4px}
+.stepper button{width:36px;height:36px;border-radius:8px;border:2px solid var(--line);background:transparent;color:var(--ink);font:600 20px var(--body);cursor:pointer}
+.stepper output{font:700 24px var(--display);min-width:1.5ch;text-align:center}
+input[type=range]{width:100%;accent-color:var(--home)}
+.rng{margin:8px 0}
+.rng .top{display:flex;justify-content:space-between;font-size:14px}
+details{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-weight:600}
+.hint{font-size:13px;color:var(--muted);margin:4px 0 0}
+
+/* Results */
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi .v{font:700 34px/1 var(--display)} .kpi .l{font-size:14px;color:var(--muted)}
+.mk{display:grid;grid-template-columns:150px 1fr 52px;gap:10px;align-items:center;margin:8px 0;font-size:15px}
+.mk .t{height:10px;background:var(--line);border-radius:5px;overflow:hidden}
+.mk .t i{display:block;height:100%;background:var(--ink);transition:width .35s ease}
+.mk b{text-align:right;font-family:var(--display);font-size:20px}
+ol.scores{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+ol.scores li{border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+ol.scores .s{font:700 26px/1 var(--display)} ol.scores .p{font-size:13px;color:var(--muted)}
+.tw{overflow-x:auto}
+table.heat{border-collapse:separate;border-spacing:3px;margin:0 auto;font-size:13px}
+table.heat th{font-weight:600;color:var(--muted);padding:2px 6px;font-size:13px}
+table.heat td{width:52px;height:40px;text-align:center;border-radius:5px;font-weight:600}
+table.fac{width:100%;border-collapse:collapse;font-size:15px}
+table.fac th,table.fac td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
+table.fac th:first-child,table.fac td:first-child{text-align:left;color:var(--muted)}
+table.fac thead th{font-family:var(--display);font-size:18px;color:var(--ink)}
+
+/* Fixtures */
+.fx{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.fx button{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;color:var(--ink);font:inherit}
+.fx button:hover{border-color:var(--ink)}
+.fx .nm{font:600 20px var(--display);display:flex;justify-content:space-between;gap:8px}
+.fx .mini{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:8px 0 4px;background:var(--line)}
+.fx .mini i:nth-child(1){background:var(--home)} .fx .mini i:nth-child(2){background:var(--draw)} .fx .mini i:nth-child(3){background:var(--away)}
+.fx .pc{font-size:13px;color:var(--muted);display:flex;justify-content:space-between}
+.how p{max-width:70ch;margin:0 0 10px}
+.how ul{margin:0 0 10px;padding-left:20px;max-width:70ch}
+footer{margin-top:34px;font-size:13px;color:var(--muted)}
+
+@media (max-width:820px){
+  .grid{grid-template-columns:1fr}
+  .pickers{grid-template-columns:1fr;gap:8px}
+  .swap{justify-self:start;margin:0}
+  .mk{grid-template-columns:110px 1fr 48px}
+  ol.scores{grid-template-columns:repeat(3,1fr)}
+  table.heat td{width:40px;height:34px}
+}
+@media (prefers-reduced-motion:reduce){.bar div,.mk .t i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Prepartita</div>
+    <div class="notice" id="notice">Carico i dati di Serie A...</div>
+  </header>
+
+  <section class="hero" aria-labelledby="hero-h">
+    <h1 id="hero-h" style="position:absolute;left:-9999px">Analisi della partita</h1>
+    <div class="pickers">
+      <div class="pick h"><label for="selH">Squadra di casa</label><select id="selH"></select></div>
+      <button class="swap" id="swap" type="button" aria-label="Inverti casa e trasferta">Inverti</button>
+      <div class="pick a"><label for="selA">Squadra in trasferta</label><select id="selA"></select></div>
+    </div>
+    <div class="bar" role="img" aria-label="Probabilità di vittoria casa, pareggio, vittoria trasferta" id="barBox">
+      <div class="bh" id="bH"></div><div class="bd" id="bD"></div><div class="ba" id="bA"></div>
+    </div>
+    <div class="nums" aria-live="polite">
+      <div class="num h"><div class="v" id="nH">–</div><div class="l" id="lH">Vince casa</div></div>
+      <div class="num d"><div class="v" id="nD">–</div><div class="l">Pareggio</div></div>
+      <div class="num a"><div class="v" id="nA">–</div><div class="l" id="lA">Vince trasferta</div></div>
+    </div>
+    <p class="summary" id="summary"></p>
+    <div class="actions">
+      <button class="btn" id="copy" type="button">Copia riepilogo</button>
+      <button class="btn ghost" id="reset" type="button">Azzera modifiche</button>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div>
+      <section class="panel" aria-labelledby="ctl-h">
+        <h2 id="ctl-h">Regola la partita</h2>
+        <div class="two">
+          <div class="team-col">
+            <h3><span class="dot" style="background:var(--home)"></span><span id="tnH">Casa</span></h3>
+            <span class="field">Ultime 5 partite (tocca per cambiare)</span>
+            <div class="chips" id="formH"></div>
+            <span class="field">Assenze importanti</span>
+            <div class="stepper"><button type="button" data-inj="H" data-d="-1" aria-label="Meno assenze casa">−</button><output id="injH">0</output><button type="button" data-inj="H" data-d="1" aria-label="Più assenze casa">+</button></div>
+          </div>
+          <div class="team-col">
+            <h3><span class="dot" style="background:var(--away)"></span><span id="tnA">Trasferta</span></h3>
+            <span class="field">Ultime 5 partite (tocca per cambiare)</span>
+            <div class="chips" id="formA"></div>
+            <span class="field">Assenze importanti</span>
+            <div class="stepper"><button type="button" data-inj="A" data-d="-1" aria-label="Meno assenze trasferta">−</button><output id="injA">0</output><button type="button" data-inj="A" data-d="1" aria-label="Più assenze trasferta">+</button></div>
+          </div>
+        </div>
+        <div class="rng">
+          <div class="top"><label for="ha">Peso del fattore campo</label><span id="haV">100%</span></div>
+          <input type="range" id="ha" min="0" max="150" step="5" value="100">
+        </div>
+        <p class="hint" id="injNames"></p>
+        <p class="hint">V vittoria, N pareggio, P sconfitta. Ogni assenza importante riduce l'attacco della squadra di circa il 4% e peggiora la sua difesa di circa il 3%.</p>
+        <details>
+          <summary>Modifica i valori delle squadre</summary>
+          <p class="hint">1,00 è la media del campionato. Attacco più alto = più gol segnati. Difesa più bassa = meno gol subiti.</p>
+          <div class="two" id="ratings"></div>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="fac-h">
+        <h2 id="fac-h">Cosa pesa sul risultato</h2>
+        <table class="fac" id="fac"></table>
+      </section>
+    </div>
+
+    <div>
+      <section class="panel" aria-labelledby="res-h">
+        <h2 id="res-h">Gol e mercati</h2>
+        <div class="kpis">
+          <div class="kpi"><div class="v" id="xgH">–</div><div class="l" id="xgHl">Gol attesi casa</div></div>
+          <div class="kpi"><div class="v" id="xgA">–</div><div class="l" id="xgAl">Gol attesi trasferta</div></div>
+        </div>
+        <div id="mk"></div>
+        <h3 style="margin-top:16px">Risultati esatti più probabili</h3>
+        <ol class="scores" id="top"></ol>
+      </section>
+
+      <section class="panel" aria-labelledby="heat-h">
+        <h2 id="heat-h">Mappa dei risultati</h2>
+        <p class="hint" style="margin-bottom:10px">Righe: gol della squadra di casa. Colonne: gol della trasferta. Più scura la cella, più probabile il risultato.</p>
+        <div class="tw"><table class="heat" id="heat"></table></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel" style="margin-top:30px" aria-labelledby="h2h-h">
+    <h2 id="h2h-h">Scontri diretti</h2>
+    <div id="h2h"></div>
+  </section>
+
+  <section style="margin-top:30px" aria-labelledby="fx-h">
+    <h2 id="fx-h">Prossime partite di Serie A</h2>
+    <div class="fx" id="fx"></div>
+  </section>
+
+  <section class="panel how" style="margin-top:30px" aria-labelledby="how-h">
+    <h2 id="how-h">Come viene calcolato</h2>
+    <p>Per ogni squadra il modello stima quanti gol segnerà, partendo dalla media reale del campionato e correggendola con attacco e difesa (gol segnati e subiti nella stagione, pesati verso la media a inizio stagione), forma delle ultime 5 partite, assenze e fattore campo. Da queste due stime ricava la probabilità di ogni risultato (distribuzione di Poisson, con la correzione di Dixon-Coles per gli 0-0, 1-0, 0-1 e 1-1).</p>
+    <p>Da quella tabella di risultati si leggono vittoria/pareggio/sconfitta, over/under e gol/no gol. Nessuna quota, nessun consiglio di giocata.</p>
+    <ul>
+      <li>Classifica, risultati, forma, calendario e scontri diretti arrivano da APIfootball e si aggiornano da soli.</li>
+      <li>Le assenze sono stimate dai giocatori segnalati come infortunati che giocano spesso: sono una stima e puoi correggerle a mano.</li>
+    </ul>
+  </section>
+  <footer>Le probabilità sono stime statistiche e non garantiscono alcun risultato.</footer>
+</div>
+
+<script>
+let TEAMS=[], ID={}, NAME={}, FIXTURES=[], names=[], R={}, FORM={}, LG={h:1.5,a:1.2}, DATA=null, INJ={};
+function autoInj(){ S.iH=(INJ[ID[S.home]]||{}).count||0; S.iA=(INJ[ID[S.away]]||{}).count||0; }
+function pick(){ S.fH=FORM[S.home].slice(); S.fA=FORM[S.away].slice(); autoInj(); update(); }
+function resetRatings(){ TEAMS.forEach(t=>{ R[t.name]={a:t.att,d:t.def}; }); }
+const DEFAULT = () => {
+  const f=FIXTURES[0];
+  const h=f?NAME[f.home]:names[0], a=f?NAME[f.away]:names[1];
+  return {home:h,away:a,fH:FORM[h].slice(),fA:FORM[a].slice(),iH:0,iA:0,ha:100};
+};
+let S=null;
+
+const $ = id => document.getElementById(id);
+const pct = (x,d=0)=> (x*100).toFixed(d).replace('.',',')+'%';
+const dec = (x,d=2)=> x.toFixed(d).replace('.',',');
+
+function formFactor(f){ const pts = f.reduce((s,c)=>s+(c==='V'?3:c==='N'?1:0),0); return 1 + (pts-7)/7*0.08; }
+
+function pois(l, n){ const p=[Math.exp(-l)]; for(let k=1;k<=n;k++) p.push(p[k-1]*l/k); return p; }
+
+function calc(h, a, o){
+  const ha = o.ha/100;
+  const injAtt = Math.pow(.96,1), injDef = Math.pow(1.03,1);
+  const attH = R[h].a * Math.pow(.96,o.iH) * formFactor(o.fH);
+  const attA = R[a].a * Math.pow(.96,o.iA) * formFactor(o.fA);
+  const defH = R[h].d * Math.pow(1.03,o.iH);
+  const defA = R[a].d * Math.pow(1.03,o.iA);
+  const nb=(LG.h+LG.a)/2;
+  let lh = nb*Math.pow(LG.h/nb,ha) * attH * defA;
+  let la = nb*Math.pow(LG.a/nb,ha) * attA * defH;
+  lh = Math.min(4,Math.max(.2,lh)); la = Math.min(4,Math.max(.2,la));
+  const N=9, ph=pois(lh,N), pa=pois(la,N), rho=-.08;
+  const g=[]; let tot=0;
+  for(let x=0;x<=N;x++){ g[x]=[]; for(let y=0;y<=N;y++){
+    let t=1;
+    if(x===0&&y===0) t=1-lh*la*rho; else if(x===0&&y===1) t=1+lh*rho; else if(x===1&&y===0) t=1+la*rho; else if(x===1&&y===1) t=1-rho;
+    const v=ph[x]*pa[y]*t; g[x][y]=v; tot+=v; } }
+  let pH=0,pD=0,pA=0,o15=0,o25=0,o35=0,btts=0; const list=[];
+  for(let x=0;x<=N;x++) for(let y=0;y<=N;y++){
+    const v=g[x][y]/tot; g[x][y]=v;
+    if(x>y)pH+=v; else if(x===y)pD+=v; else pA+=v;
+    if(x+y>1)o15+=v; if(x+y>2)o25+=v; if(x+y>3)o35+=v; if(x>0&&y>0)btts+=v;
+    list.push([x,y,v]);
+  }
+  list.sort((p,q)=>q[2]-p[2]);
+  return {lh,la,g,pH,pD,pA,o15,o25,o35,btts,top:list.slice(0,5),attH,attA,defH,defA};
+}
+
+/* ---------- UI ---------- */
+function fillSelects(){
+  [$('selH'),$('selA')].forEach(s=>{ s.innerHTML=names.map(n=>`<option>${n}</option>`).join(''); });
+}
+function renderChips(box, key){
+  box.innerHTML='';
+  S[key].forEach((c,i)=>{
+    const b=document.createElement('button'); b.type='button'; b.className='chip '+c; b.textContent=c;
+    b.setAttribute('aria-label','Partita '+(i+1)+': '+(c==='V'?'vittoria':c==='N'?'pareggio':'sconfitta')+'. Tocca per cambiare');
+    b.onclick=()=>{ S[key][i] = c==='V'?'N':c==='N'?'P':'V'; update(); };
+    box.appendChild(b);
+  });
+}
+function renderRatings(){
+  const mk=(team,side)=>`<div><h3>${team}</h3>
+    <div class="rng"><div class="top"><label for="a${side}">Attacco</label><span id="a${side}v">${dec(R[team].a)}</span></div><input type="range" id="a${side}" min="0.5" max="1.7" step="0.05" value="${R[team].a}"></div>
+    <div class="rng"><div class="top"><label for="d${side}">Difesa (gol subiti)</label><span id="d${side}v">${dec(R[team].d)}</span></div><input type="range" id="d${side}" min="0.5" max="1.5" step="0.05" value="${R[team].d}"></div></div>`;
+  $('ratings').innerHTML = mk(S.home,'H') + mk(S.away,'A');
+  [['H',S.home],['A',S.away]].forEach(([side,team])=>{
+    $('a'+side).oninput=e=>{ R[team].a=+e.target.value; update(true); };
+    $('d'+side).oninput=e=>{ R[team].d=+e.target.value; update(true); };
+  });
+}
+function summaryText(r){
+  const h=S.home,a=S.away;
+  const top=r.top[0];
+  let lead;
+  const mx=Math.max(r.pH,r.pA);
+  if(mx<.40) lead='Partita molto aperta, nessuna squadra parte nettamente avanti.';
+  else { const fav=r.pH>=r.pA?h:a; lead=`${fav} parte avanti con il ${pct(mx)} di probabilità di vittoria.`; }
+  return `${lead} Il risultato più probabile è ${top[0]}-${top[1]} (${pct(top[2],1)}). Gol attesi: ${dec(r.lh)} per ${h}, ${dec(r.la)} per ${a}.`;
+}
+function update(keepRatings){
+  const h=S.home,a=S.away;
+  $('selH').value=h; $('selA').value=a;
+  $('tnH').textContent=h; $('tnA').textContent=a;
+  $('lH').textContent='Vince '+h; $('lA').textContent='Vince '+a;
+  $('xgHl').textContent='Gol attesi '+h; $('xgAl').textContent='Gol attesi '+a;
+  $('injH').textContent=S.iH; $('injA').textContent=S.iA;
+  const ih=INJ[ID[h]], ia=INJ[ID[a]];
+  $('injNames').textContent=(ih||ia)?`Infortunati segnalati che giocano spesso. ${h}: ${ih&&ih.names.length?ih.names.join(', '):'nessuno'}. ${a}: ${ia&&ia.names.length?ia.names.join(', '):'nessuno'}.`:'';
+  $('ha').value=S.ha; $('haV').textContent=S.ha+'%';
+  renderChips($('formH'),'fH'); renderChips($('formA'),'fA');
+  if(!keepRatings) renderRatings(); else {
+    ['H','A'].forEach(s=>{ const t=s==='H'?h:a; $('a'+s+'v').textContent=dec(R[t].a); $('d'+s+'v').textContent=dec(R[t].d); });
+  }
+  const r=calc(h,a,S);
+  $('bH').style.width=r.pH*100+'%'; $('bD').style.width=r.pD*100+'%'; $('bA').style.width=r.pA*100+'%';
+  $('barBox').setAttribute('aria-label',`${h} ${pct(r.pH)}, pareggio ${pct(r.pD)}, ${a} ${pct(r.pA)}`);
+  $('nH').textContent=pct(r.pH); $('nD').textContent=pct(r.pD); $('nA').textContent=pct(r.pA);
+  $('summary').textContent=summaryText(r);
+  $('xgH').textContent=dec(r.lh); $('xgA').textContent=dec(r.la);
+  const rows=[['Più di 1,5 gol',r.o15],['Più di 2,5 gol',r.o25],['Più di 3,5 gol',r.o35],['Segnano entrambe',r.btts],['Non segnano entrambe',1-r.btts]];
+  $('mk').innerHTML=rows.map(([l,v])=>`<div class="mk"><span>${l}</span><span class="t"><i style="width:${v*100}%"></i></span><b>${pct(v)}</b></div>`).join('');
+  $('top').innerHTML=r.top.map(t=>`<li><div class="s">${t[0]}-${t[1]}</div><div class="p">${pct(t[2],1)}</div></li>`).join('');
+  // heatmap 0..5
+  let max=0; for(let x=0;x<=5;x++) for(let y=0;y<=5;y++) max=Math.max(max,r.g[x][y]);
+  let html='<thead><tr><th></th>'+[0,1,2,3,4,5].map(y=>`<th scope="col">${y}</th>`).join('')+'</tr></thead><tbody>';
+  for(let x=0;x<=5;x++){
+    html+=`<tr><th scope="row">${x}</th>`;
+    for(let y=0;y<=5;y++){
+      const v=r.g[x][y], col= x>y?'--home':x===y?'--draw':'--away';
+      html+=`<td style="background:color-mix(in srgb,var(${col}) ${Math.round(v/max*85)}%,transparent)" title="${h} ${x} - ${y} ${a}">${v<.005?'<1':(v*100).toFixed(v<.1?1:0).replace('.',',')}</td>`;
+    }
+    html+='</tr>';
+  }
+  $('heat').innerHTML=html+'</tbody>';
+  // fattori
+  const fH=formFactor(S.fH)-1, fA=formFactor(S.fA)-1;
+  const sg=v=>(v>=0?'+':'')+(v*100).toFixed(0)+'%';
+  $('fac').innerHTML=`<thead><tr><th></th><th>${h}</th><th>${a}</th></tr></thead><tbody>
+    <tr><td>Attacco</td><td>${dec(R[h].a)}</td><td>${dec(R[a].a)}</td></tr>
+    <tr><td>Difesa (gol subiti)</td><td>${dec(R[h].d)}</td><td>${dec(R[a].d)}</td></tr>
+    <tr><td>Forma recente</td><td>${sg(fH)}</td><td>${sg(fA)}</td></tr>
+    <tr><td>Assenze (effetto sui gol)</td><td>${S.iH?sg(Math.pow(.96,S.iH)-1):'0%'}</td><td>${S.iA?sg(Math.pow(.96,S.iA)-1):'0%'}</td></tr>
+    <tr><td>Gol attesi</td><td><b>${dec(r.lh)}</b></td><td><b>${dec(r.la)}</b></td></tr></tbody>`;
+  renderFixtures();
+  loadH2H();
+}
+function renderFixtures(){
+  if(!FIXTURES.length){ $('fx').innerHTML='<p class="hint">Nessuna partita in programma trovata.</p>'; return; }
+  $('fx').innerHTML=FIXTURES.map((f,i)=>{
+    const h=NAME[f.home], a=NAME[f.away];
+    const r=calc(h,a,{fH:FORM[h],fA:FORM[a],iH:0,iA:0,ha:100});
+    const dt=new Date(f.date).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
+    return `<button type="button" data-i="${i}" aria-label="Analizza ${h} contro ${a}"><div class="nm"><span>${h}</span><span>${a}</span></div>
+      <div class="mini"><i style="width:${r.pH*100}%"></i><i style="width:${r.pD*100}%"></i><i style="width:${r.pA*100}%"></i></div>
+      <div class="pc"><span>${pct(r.pH)}</span><span>${dt}</span><span>${pct(r.pA)}</span></div></button>`;
+  }).join('');
+  $('fx').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const f=FIXTURES[+b.dataset.i]; S.home=NAME[f.home]; S.away=NAME[f.away];
+    pick();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+}
+
+const H2C={}; let h2Key='';
+async function loadH2H(){
+  const h=S.home,a=S.away,key=ID[h]+'-'+ID[a],box=$('h2h');
+  if(key===h2Key) return; h2Key=key;
+  const ck=[ID[h],ID[a]].sort().join('-');
+  box.innerHTML='<p class="hint">Carico gli scontri diretti...</p>';
+  try{
+    if(!H2C[ck]){
+      const r=await fetch(`/api/h2h?a=${ID[h]}&b=${ID[a]}`); const d=await r.json();
+      if(!r.ok) throw new Error(d.error||('Errore '+r.status));
+      H2C[ck]=d.matches;
+    }
+    if(h2Key!==key) return;
+    const ms=H2C[ck];
+    if(!ms.length){ box.innerHTML='<p class="hint">Nessuno scontro diretto trovato nelle stagioni disponibili.</p>'; return; }
+    let w=0,d=0,l=0;
+    ms.forEach(m=>{ const hs=m.homeId===ID[h]?m.hg:m.ag, as=m.homeId===ID[h]?m.ag:m.hg; if(hs>as)w++; else if(hs===as)d++; else l++; });
+    const rows=ms.map(m=>`<tr><td>${new Date(m.date).toLocaleDateString('it-IT',{month:'short',year:'numeric'})}</td><td>${m.home}</td><td><b>${m.hg}-${m.ag}</b></td><td>${m.away}</td></tr>`).join('');
+    box.innerHTML=`<p style="margin:0 0 8px">Ultimi ${ms.length} incontri: ${h} ${w} vittorie, ${d} pareggi, ${a} ${l} vittorie.</p>
+      <div class="tw"><table class="fac">${rows}</table></div>`;
+  }catch(e){
+    if(h2Key===key) box.innerHTML=`<p class="hint">Scontri diretti non disponibili (${e.message}).</p>`;
+  }
+}
+
+/* ---------- Eventi ---------- */
+$('selH').onchange=e=>{ S.home=e.target.value; if(S.home===S.away){ S.away=names.find(n=>n!==S.home);} pick(); };
+$('selA').onchange=e=>{ S.away=e.target.value; if(S.home===S.away){ S.home=names.find(n=>n!==S.away);} pick(); };
+$('swap').onclick=()=>{ [S.home,S.away]=[S.away,S.home]; [S.fH,S.fA]=[S.fA,S.fH]; [S.iH,S.iA]=[S.iA,S.iH]; update(); };
+document.querySelectorAll('[data-inj]').forEach(b=>b.onclick=()=>{
+  const k='i'+b.dataset.inj; S[k]=Math.min(3,Math.max(0,S[k]+ +b.dataset.d)); update(true);
+});
+$('ha').oninput=e=>{ S.ha=+e.target.value; update(true); };
+$('reset').onclick=()=>{ resetRatings(); S=DEFAULT(); autoInj(); update(); };
+$('copy').onclick=async()=>{
+  const r=calc(S.home,S.away,S);
+  const txt=`${S.home} - ${S.away}\n1: ${pct(r.pH)}  X: ${pct(r.pD)}  2: ${pct(r.pA)}\n${summaryText(r)}`;
+  try{ await navigator.clipboard.writeText(txt); $('copy').textContent='Copiato'; }
+  catch(e){ $('copy').textContent='Copia non disponibile'; }
+  setTimeout(()=>{ $('copy').textContent='Copia riepilogo'; },1800);
+};
+
+async function boot(){
+  try{
+    const r=await fetch('/api/serie-a'); const d=await r.json();
+    if(!r.ok) throw new Error(d.error||('Errore '+r.status));
+    DATA=d; TEAMS=d.teams; LG=d.league;
+    TEAMS.forEach(t=>{ ID[t.name]=t.id; NAME[t.id]=t.name; FORM[t.name]=t.form; });
+    names=TEAMS.map(t=>t.name).sort((x,y)=>x.localeCompare(y,'it'));
+    FIXTURES=d.fixtures.filter(f=>NAME[f.home]&&NAME[f.away]);
+    resetRatings(); S=DEFAULT(); fillSelects();
+    const when=new Date(d.updated).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    $('notice').textContent=`Serie A, dati APIfootball (${d.played} partite giocate), aggiornati ${when}. Strumento di analisi, non di scommesse.`;
+    update();
+    fetch('/api/injuries').then(r=>r.ok?r.json():null).then(j=>{ if(!j) return; INJ=j.injuries||{}; autoInj(); update(); }).catch(()=>{});
+  }catch(e){
+    $('notice').textContent='Impossibile caricare i dati: '+e.message;
+    $('summary').textContent='I dati di Serie A non sono disponibili in questo momento. Riprova tra poco.';
+  }
+}
+boot();
+</script>
+</body>
+</html>
