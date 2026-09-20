@@ -1,11 +1,11 @@
-const { afGet, serieAId, num } = require('./_common');
+const { afGet, checkedLeague, num } = require('./_common');
 
 // Stima le assenze: giocatori segnalati come infortunati che hanno giocato
 // almeno il 40% delle partite del giocatore più utilizzato della squadra.
 module.exports = async (req, res) => {
   try {
-    const lid = await serieAId();
-    const T = await afGet({ action: 'get_teams', league_id: lid });
+    const L = await checkedLeague(req.query.id);
+    const T = await afGet({ action: 'get_teams', league_id: L.id });
     const out = {};
     for (const t of T) {
       const pl = t.players || [];

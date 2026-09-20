@@ -1,5 +1,4 @@
 const BASE = 'https://apiv3.apifootball.com/';
-const ITALY_COUNTRY_ID = '5';
 
 async function afGet(params) {
   const key = process.env.APIFOOTBALL_KEY;
@@ -31,26 +30,49 @@ async function afGet(params) {
   return d;
 }
 
-let cachedLeague = null;
-async function serieAId() {
-  if (process.env.SERIE_A_LEAGUE_ID) return process.env.SERIE_A_LEAGUE_ID;
-  if (cachedLeague) return cachedLeague;
-  const L = await afGet({ action: 'get_leagues', country_id: ITALY_COUNTRY_ID });
-  const f = L.find(l => String(l.league_name).trim().toLowerCase() === 'serie a');
+// Campionati principali: [paese, nome del campionato]
+const DEFS = [
+  ['Italy', 'serie a'],
+  ['England', 'premier league'],
+  ['Spain', 'la liga'],
+  ['Germany', 'bundesliga'],
+  ['France', 'ligue 1'],
+  ['Netherlands', 'eredivisie'],
+  ['Portugal', 'primeira liga']
+];
+
+let cache = null;
+async function listLeagues() {
+  if (cache && Date.now() - cache.t < 6 * 60 * 1000) return cache.v;
+  const all = await afGet({ action: 'get_leagues' });
+  const out = [];
+  for (const [country, name] of DEFS) {
+    const c = all.filter(l =>
+      String(l.country_name).trim().toLowerCase() === country.toLowerCase() &&
+      String(l.league_name).trim().toLowerCase() === name);
+    if (!c.length) continue;
+    c.sort((x, y) => String(y.league_season).localeCompare(String(x.league_season)));
+    const f = c[0];
+    out.push({ id: String(f.league_id), name: f.league_name, country: f.country_name, logo: f.league_logo || null, season: f.league_season });
+  }
+  cache = { t: Date.now(), v: out };
+  return out;
+}
+
+// Accetta solo i campionati della lista: evita che qualcuno usi la tua chiave per altre richieste
+async function checkedLeague(id) {
+  const list = await listLeagues();
+  const f = list.find(l => l.id === String(id || ''));
   if (!f) {
-    const e = new Error('Serie A non trovata: controlla che sia inclusa nel tuo piano');
-    e.status = 502;
+    const e = new Error('Campionato non disponibile');
+    e.status = 400;
     throw e;
   }
-  cachedLeague = f.league_id;
-  return cachedLeague;
+  return f;
 }
 
 const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const ymd = d => d.toISOString().slice(0, 10);
+function seasonYear(d = new Date()) { return d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1; }
 
-function seasonYear(d = new Date()) {
-  return d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
-}
-
-module.exports = { afGet, serieAId, num, ymd, seasonYear };
+module.exports = { afGet, listLeagues, checkedLeague, num, ymd, seasonYear };
