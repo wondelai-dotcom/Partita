@@ -2,6 +2,8 @@
 
 Probabilità 1/X/2, gol attesi, over/under, gol/no gol, mappa dei risultati, scontri diretti e assenze stimate.
 I dati arrivano da APIfootball.com (API v3) tramite tre funzioni server nella cartella `api/`: la chiave non finisce mai nel browser.
+fole
+
 
 ## 1. Chiave API
 Prendila dal pannello di APIfootball (sezione "Your APIkey"). Non scriverla in nessun file del progetto e non condividerla in chat.
