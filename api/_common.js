@@ -40,20 +40,31 @@ const DEFS = [
   ['Netherlands', 'eredivisie'],
   ['Portugal', 'primeira liga']
 ];
+// Coppe europee: riconosciute dal nome, nel paese "Eurocups"
+const CUPS = [
+  { key: 'ucl', test: n => n.includes('champions league') && !/women|qualif|play-?off|youth/.test(n) },
+  { key: 'uel', test: n => n.includes('europa league') && !/conference|women|qualif|play-?off|youth/.test(n) }
+];
 
 let cache = null;
 async function listLeagues() {
   if (cache && Date.now() - cache.t < 6 * 60 * 1000) return cache.v;
   const all = await afGet({ action: 'get_leagues' });
   const out = [];
+  const pickLatest = arr => arr.sort((x, y) => String(y.league_season).localeCompare(String(x.league_season)))[0];
   for (const [country, name] of DEFS) {
     const c = all.filter(l =>
       String(l.country_name).trim().toLowerCase() === country.toLowerCase() &&
       String(l.league_name).trim().toLowerCase() === name);
     if (!c.length) continue;
-    c.sort((x, y) => String(y.league_season).localeCompare(String(x.league_season)));
-    const f = c[0];
-    out.push({ id: String(f.league_id), name: f.league_name, country: f.country_name, logo: f.league_logo || null, season: f.league_season });
+    const f = pickLatest(c);
+    out.push({ id: String(f.league_id), name: f.league_name, country: f.country_name, logo: f.league_logo || null, season: f.league_season, kind: 'league' });
+  }
+  for (const cup of CUPS) {
+    const c = all.filter(l => String(l.country_name).trim().toLowerCase() === 'eurocups' && cup.test(String(l.league_name).trim().toLowerCase()));
+    if (!c.length) continue;
+    const f = pickLatest(c);
+    out.push({ id: String(f.league_id), name: f.league_name, country: 'Europa', logo: f.league_logo || null, season: f.league_season, kind: 'cup' });
   }
   cache = { t: Date.now(), v: out };
   return out;
@@ -71,8 +82,27 @@ async function checkedLeague(id) {
   return f;
 }
 
+// Database Upstash Redis (opzionale): serve per misurare la precisione e limitare i commenti AI
+const redisUrl = () => process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '';
+const redisTok = () => process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '';
+const hasRedis = () => !!(redisUrl() && redisTok());
+async function redis(cmd) {
+  if (!hasRedis()) return null;
+  const r = await fetch(redisUrl(), { method: 'POST', headers: { Authorization: 'Bearer ' + redisTok(), 'Content-Type': 'application/json' }, body: JSON.stringify(cmd) });
+  const d = await r.json();
+  if (d.error) throw new Error('Redis: ' + d.error);
+  return d.result;
+}
+async function redisPipe(cmds) {
+  if (!hasRedis() || !cmds.length) return [];
+  const r = await fetch(redisUrl().replace(/\/$/, '') + '/pipeline', { method: 'POST', headers: { Authorization: 'Bearer ' + redisTok(), 'Content-Type': 'application/json' }, body: JSON.stringify(cmds) });
+  const d = await r.json();
+  if (!Array.isArray(d)) throw new Error('Redis: risposta non valida');
+  return d.map(x => x.result);
+}
+
 const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const ymd = d => d.toISOString().slice(0, 10);
 function seasonYear(d = new Date()) { return d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1; }
 
-module.exports = { afGet, listLeagues, checkedLeague, num, ymd, seasonYear };
+module.exports = { afGet, listLeagues, checkedLeague, hasRedis, redis, redisPipe, num, ymd, seasonYear };

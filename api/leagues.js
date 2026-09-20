@@ -1,4 +1,4 @@
-const { listLeagues } = require('./_common');
+const { listLeagues, hasRedis } = require('./_common');
 
 module.exports = async (req, res) => {
   try {
@@ -9,7 +9,7 @@ module.exports = async (req, res) => {
       throw e;
     }
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-    res.status(200).json({ leagues });
+    res.status(200).json({ leagues, features: { track: hasRedis(), ai: !!process.env.ANTHROPIC_API_KEY } });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
