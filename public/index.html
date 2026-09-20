@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Prepartita — Analisi calcio con dati reali</title>
+<meta name="theme-color" content="#101B2B">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Prepartita">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -111,6 +117,19 @@ ul.why{margin:8px 0 0;padding-left:20px} ul.why li{margin:4px 0}
 .how p{max-width:72ch;margin:0 0 10px} .how ul{margin:0 0 10px;padding-left:20px;max-width:72ch}
 footer{margin-top:34px;font-size:13px;color:var(--muted)}
 .sec{margin-top:30px}
+.tab.acc{border-style:dashed}
+.fxbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.fxbar input[type=search]{flex:1;min-width:180px;font:16px var(--body);color:var(--ink);background:var(--card);border:2px solid var(--line);border-radius:8px;padding:8px 10px}
+.fxbar label{font-size:15px;display:flex;gap:6px;align-items:center}
+.star{font:22px/1 var(--body);background:transparent;border:0;color:var(--muted);cursor:pointer;padding:0 2px}
+.star.on{color:#E0A100}
+.tag{display:inline-block;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin-left:6px;color:var(--muted)}
+.ai p{max-width:70ch;margin:0 0 8px;font-size:17px}
+table.sm{width:100%;border-collapse:collapse;font-size:14px}
+table.sm th,table.sm td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right}
+table.sm th:first-child,table.sm td:first-child{text-align:left}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin:10px 0}
+.cards .kpi .v{font-size:32px}
 @media (max-width:820px){
   .grid{grid-template-columns:1fr}
   .pickers{grid-template-columns:1fr;gap:8px}
@@ -132,10 +151,15 @@ footer{margin-top:34px;font-size:13px;color:var(--muted)}
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Campionato"></nav>
   <div class="state" id="state" role="status"></div>
+  <div id="accView" hidden></div>
 
   <div id="app" hidden>
     <section aria-labelledby="fx-h">
       <h2 id="fx-h">Prossime partite</h2>
+      <div class="fxbar">
+        <input type="search" id="q" placeholder="Cerca una squadra" aria-label="Cerca una squadra">
+        <label><input type="checkbox" id="onlyFav"> Solo le mie squadre</label>
+      </div>
       <div class="fx" id="fx"></div>
     </section>
 
@@ -155,10 +179,13 @@ footer{margin-top:34px;font-size:13px;color:var(--muted)}
       <p class="summary" id="summary"></p>
       <div class="actions">
         <button class="btn" id="copy" type="button">Copia riepilogo</button>
+        <button class="btn" id="share" type="button">Immagine da condividere</button>
+        <button class="btn" id="aiBtn" type="button" hidden>Commento AI</button>
         <button class="btn ghost" id="reset" type="button">Azzera modifiche</button>
       </div>
     </section>
 
+    <div class="panel ai" id="aiBox" aria-live="polite" hidden style="margin-bottom:22px"></div>
     <div class="panel" aria-labelledby="rel-h">
       <h2 id="rel-h">Affidabilità dei dati</h2>
       <div class="rel"><div class="lv" id="relLv">–</div><div class="meter"><i id="relBar" style="width:0"></i></div></div>
@@ -172,14 +199,14 @@ footer{margin-top:34px;font-size:13px;color:var(--muted)}
           <h2 id="ctl-h">Regola la partita</h2>
           <div class="two">
             <div class="team-col">
-              <h3><span class="dot" style="background:var(--home)"></span><span id="tnH">Casa</span></h3>
+              <h3><span class="dot" style="background:var(--home)"></span><span id="tnH">Casa</span><button class="star" id="starH" type="button" aria-label="Aggiungi ai preferiti">☆</button></h3>
               <span class="field">Ultime 5 partite (tocca per cambiare)</span>
               <div class="chips" id="formH"></div>
               <span class="field">Assenze importanti</span>
               <div class="stepper"><button type="button" data-inj="H" data-d="-1" aria-label="Meno assenze casa">−</button><output id="injH">0</output><button type="button" data-inj="H" data-d="1" aria-label="Più assenze casa">+</button></div>
             </div>
             <div class="team-col">
-              <h3><span class="dot" style="background:var(--away)"></span><span id="tnA">Trasferta</span></h3>
+              <h3><span class="dot" style="background:var(--away)"></span><span id="tnA">Trasferta</span><button class="star" id="starA" type="button" aria-label="Aggiungi ai preferiti">☆</button></h3>
               <span class="field">Ultime 5 partite (tocca per cambiare)</span>
               <div class="chips" id="formA"></div>
               <span class="field">Assenze importanti</span>
@@ -246,10 +273,11 @@ footer{margin-top:34px;font-size:13px;color:var(--muted)}
         <li>Le assenze sono una stima dai giocatori segnalati come infortunati. Quando escono le formazioni, si usano gli assenti indicati.</li>
       </ul>
     </section>
-    <footer>Le probabilità sono stime statistiche e non garantiscono alcun risultato.</footer>
+    <footer>Le probabilità sono stime statistiche e non garantiscono alcun risultato. Su telefono puoi installarla: menu del browser, "Aggiungi alla schermata Home".</footer>
   </div>
 </div>
 
+<script src="/model.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const pct = (x,d=0)=> (x*100).toFixed(d).replace('.',',')+'%';
@@ -257,54 +285,22 @@ const dec = (x,d=2)=> x.toFixed(d).replace('.',',');
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let LEAGUES=[], CUR=null;
-let TEAMS={}, ID={}, NAME={}, KK={}, LG={h:1.5,a:1.2,base:{h:.45,d:.26,a:.29}}, FIX=[], F=null, INJ={}, names=[], S=null;
+let TEAMS={}, ID={}, NAME={}, KK={}, LG={h:1.5,a:1.2,base:{h:.45,d:.26,a:.29}}, FIX=[], F=null, names=[], S=null, D=null, BIAS=null, BIASN=0, CUP=false, FEAT={track:false,ai:false}, FAV=[], LASTREL=null;
+try{ FAV=JSON.parse(localStorage.getItem('pp_fav')||'[]'); }catch(e){ FAV=[]; }
 
-/* ---------- modello ---------- */
-function formFactor(f){ const pts=f.reduce((s,c)=>s+(c==='V'?3:c==='N'?1:0),0); return 1+(pts-7)/7*0.04; }
-function pois(l,n){ const p=[Math.exp(-l)]; for(let k=1;k<=n;k++) p.push(p[k-1]*l/k); return p; }
-
-function core(h,a,o){
-  const H=TEAMS[h], A=TEAMS[a], kh=KK[h], ka=KK[a], w=.5;
-  const ha=o.ha/100, nb=(LG.h+LG.a)/2;
-  const baseH=nb*Math.pow(LG.h/nb,ha), baseA=nb*Math.pow(LG.a/nb,ha);
-  const attH=(w*H.ah+(1-w)*H.a)*kh.a, defA=(w*A.da+(1-w)*A.d)*ka.d;
-  const attA=(w*A.aa+(1-w)*A.a)*ka.a, defH=(w*H.dh+(1-w)*H.d)*kh.d;
-  const fH=formFactor(o.fH), fA=formFactor(o.fA);
-  const iaH=Math.pow(.96,o.iH), iaA=Math.pow(.96,o.iA);
-  const idH=Math.pow(1.03,o.iH), idA=Math.pow(1.03,o.iA);
-  const rH=(o.restH!=null&&o.restH<=3)?.97:1, rA=(o.restA!=null&&o.restA<=3)?.97:1;
-  let lh=baseH*attH*defA*idA*fH*iaH*rH, la=baseA*attA*defH*idH*fA*iaA*rA;
-  lh=Math.min(4,Math.max(.2,lh)); la=Math.min(4,Math.max(.2,la));
-  const N=9, ph=pois(lh,N), pa=pois(la,N), rho=-.08, g=[]; let tot=0;
-  for(let x=0;x<=N;x++){ g[x]=[]; for(let y=0;y<=N;y++){
-    let t=1;
-    if(x===0&&y===0)t=1-lh*la*rho; else if(x===0&&y===1)t=1+lh*rho; else if(x===1&&y===0)t=1+la*rho; else if(x===1&&y===1)t=1-rho;
-    const v=ph[x]*pa[y]*t; g[x][y]=v; tot+=v; } }
-  let pH=0,pD=0,pA=0,o15=0,o25=0,o35=0,btts=0; const list=[];
-  for(let x=0;x<=N;x++) for(let y=0;y<=N;y++){
-    const v=g[x][y]/tot; g[x][y]=v;
-    if(x>y)pH+=v; else if(x===y)pD+=v; else pA+=v;
-    if(x+y>1)o15+=v; if(x+y>2)o25+=v; if(x+y>3)o35+=v; if(x>0&&y>0)btts+=v;
-    list.push([x,y,v]);
-  }
-  list.sort((p,q)=>q[2]-p[2]);
-  return {lh,la,g,pH,pD,pA,o15,o25,o35,btts,top:list.slice(0,5),attH,attA,defH,defA,fH,fA,iaH,iaA,rH,rA};
+/* ---------- modello (in model.js) ---------- */
+const ctx=()=>({T:TEAMS,K:KK,LG,bias:BIAS});
+function analyze(h,a,o,pred,useApi){ return Model.analyze(ctx(),h,a,o,pred,useApi); }
+function teamAbs(t){ return t.absAtt!=null?{att:t.absAtt,def:t.absDef,list:t.absList||[]}:null; }
+function absOf(side){
+  const t=TEAMS[side==='h'?S.home:S.away];
+  if(F&&F.abs&&F.abs[side]) return F.abs[side];
+  return teamAbs(t);
 }
-// probabilità finali: modello + avvicinamento alle frequenze del campionato + secondo modello
-function analyze(h,a,o,pred,useApi){
-  const c=core(h,a,o), s=.08, b=LG.base;
-  let pH=(1-s)*c.pH+s*b.h, pD=(1-s)*c.pD+s*b.d, pA=(1-s)*c.pA+s*b.a, o25=c.o25, btts=c.btts, used=false;
-  if(pred&&useApi){ const w=.3; pH=(1-w)*pH+w*pred.h; pD=(1-w)*pD+w*pred.d; pA=(1-w)*pA+w*pred.a; o25=(1-w)*o25+w*pred.o25; btts=(1-w)*btts+w*pred.btts; used=true; }
-  const sum=pH+pD+pA; pH/=sum; pD/=sum; pA/=sum;
-  return Object.assign(c,{pH,pD,pA,o25,btts,used,raw:{pH:c.pH,pD:c.pD,pA:c.pA,o25:c.o25,btts:c.btts}});
+function opts(){
+  return {fH:S.fH,fA:S.fA,iH:S.iH,iA:S.iA,ha:S.ha,absH:S.manual?null:absOf('h'),absA:S.manual?null:absOf('a'),restH:F?F.restH:null,restA:F?F.restA:null};
 }
-function opts(){ return {fH:S.fH,fA:S.fA,iH:S.iH,iA:S.iA,ha:S.ha,restH:F?F.restH:null,restA:F?F.restA:null}; }
-function fixOpts(f){
-  const h=NAME[f.home],a=NAME[f.away];
-  const ih=f.hasLineup?Math.min(3,f.miss.h.length):((INJ[f.home]||{}).count||0);
-  const ia=f.hasLineup?Math.min(3,f.miss.a.length):((INJ[f.away]||{}).count||0);
-  return {fH:TEAMS[h].form,fA:TEAMS[a].form,iH:ih,iA:ia,ha:100,restH:f.restH,restA:f.restA};
-}
+function fixOpts(f){ return Model.fixtureOpts(ctx(),f,NAME[f.home],NAME[f.away]); }
 
 function reliability(r){
   const H=TEAMS[S.home],A=TEAMS[S.away], why=[]; let sc=0;
@@ -317,12 +313,13 @@ function reliability(r){
     why.push(dif<.08?'I due modelli sono d\'accordo.':dif<.15?'I due modelli differiscono in modo moderato.':'I due modelli sono in forte disaccordo: prudenza.'); }
   else { sc+=12; why.push('Secondo modello non disponibile per questa partita.'); }
   if(F&&F.hasLineup){ sc+=15; why.push('Formazioni ufficiali disponibili.'); }
-  else { sc+=4; why.push('Formazioni non ancora note: le assenze sono stimate.'); }
-  if(F||Object.keys(INJ).length){ sc+=15; } else { sc+=5; why.push('Dati sugli infortuni non disponibili.'); }
+  else { sc+=4; why.push('Formazioni non ancora note: le assenze sono stimate dai giocatori infortunati.'); }
+  if(F&&F.hasLineup){ sc+=15; } else if(absOf('h')&&absOf('a')){ sc+=10; } else { sc+=5; why.push('Dati sugli infortuni non disponibili.'); }
+  if(CUP){ sc-=10; why.push('Coppa europea: squadre di campionati diversi, i valori sono più stimati che misurati.'); }
   if(F&&F.restH!=null&&F.restA!=null&&(F.restH<=3||F.restA<=3)) why.push('Una delle due squadre ha giocato da poco (3 giorni o meno): possibile stanchezza.');
   const mx=Math.max(r.pH,r.pD,r.pA);
   if(mx<.45) why.push('Partita molto equilibrata: nessun esito supera il 45%.');
-  sc=Math.round(Math.min(100,sc));
+  sc=Math.round(Math.max(0,Math.min(100,sc)));
   return {sc,lv:sc>=70?'Alta':sc>=45?'Media':'Bassa',why};
 }
 
@@ -348,13 +345,9 @@ function renderRatings(){
     $('rd'+s).oninput=e=>{ KK[t].d=(+e.target.value)/TEAMS[t].d; $('rd'+s+'v').textContent=dec(+e.target.value); update(true); };
   });
 }
-function autoInj(){
-  if(F&&F.hasLineup){ S.iH=Math.min(3,F.miss.h.length); S.iA=Math.min(3,F.miss.a.length); }
-  else { S.iH=(INJ[ID[S.home]]||{}).count||0; S.iA=(INJ[ID[S.away]]||{}).count||0; }
-}
 function pick(fx){
-  F=fx||null; S.fH=TEAMS[S.home].form.slice(); S.fA=TEAMS[S.away].form.slice();
-  autoInj(); update(false);
+  F=fx||null; S.fH=TEAMS[S.home].form.slice(); S.fA=TEAMS[S.away].form.slice(); S.manual=false; S.iH=0; S.iA=0;
+  update(false);
   history.replaceState(null,'','#l='+CUR+'&h='+ID[S.home]+'&a='+ID[S.away]);
 }
 function summaryText(r){
@@ -370,7 +363,10 @@ function whyList(r){
   else out.push('Attacco e difesa delle due squadre si equilibrano.');
   out.push(`In casa ${h} segna circa ${dec(H.ah*LG.h)} gol a partita, mentre ${a} ne subisce circa ${dec(A.da*LG.h)} fuori casa (stime corrette per le poche partite).`);
   out.push(`Fuori casa ${a} segna circa ${dec(A.aa*LG.a)} gol a partita, mentre ${h} ne subisce circa ${dec(H.dh*LG.a)} in casa.`);
-  if(S.iH||S.iA) out.push(`Assenze considerate: ${S.iH} per ${h}, ${S.iA} per ${a}.`);
+  const ah=absOf('h'),aa=absOf('a');
+  if(!S.manual&&((ah&&ah.list.length)||(aa&&aa.list.length))) out.push(`Assenze pesate per importanza: ${ah?ah.list.length:0} per ${h}, ${aa?aa.list.length:0} per ${a}.`);
+  else if(S.manual&&(S.iH||S.iA)) out.push(`Assenze inserite a mano: ${S.iH} per ${h}, ${S.iA} per ${a}.`);
+  if(CUP) out.push('Coppa europea: le valutazioni dei campionati nazionali sono corrette con un fattore di forza del campionato (stima indicativa).');
   if(r.rH<1||r.rA<1) out.push('Giorni di riposo ridotti per '+(r.rH<1&&r.rA<1?'entrambe le squadre':r.rH<1?h:a)+': piccola riduzione dei gol attesi.');
   return out;
 }
@@ -381,10 +377,11 @@ function update(keep){
   $('tnH').textContent=h; $('tnA').textContent=a;
   $('lH').textContent='Vince '+h; $('lA').textContent='Vince '+a;
   $('xgHl').textContent='Gol attesi '+h; $('xgAl').textContent='Gol attesi '+a;
-  $('injH').textContent=S.iH; $('injA').textContent=S.iA;
-  const nm=(fx,side,t)=>{ if(fx&&fx.hasLineup) return fx.miss[side]; const i=INJ[ID[t]]; return i?i.names:null; };
-  const mh=nm(F,'h',h), ma=nm(F,'a',a);
-  $('injNames').textContent=(mh||ma)?`Assenti segnalati. ${h}: ${mh&&mh.length?mh.join(', '):'nessuno'}. ${a}: ${ma&&ma.length?ma.join(', '):'nessuno'}.`:'';
+  const ah=absOf('h'), aa=absOf('a');
+  $('injH').textContent=S.manual?S.iH:(ah?ah.list.length:S.iH); $('injA').textContent=S.manual?S.iA:(aa?aa.list.length:S.iA);
+  const fmt=l=>l.length?l.map(x=>`${x.name}${(x.att||x.def)?' ('+[x.att?'attacco '+String(x.att).replace('.',',')+'%':'',x.def?'difesa +'+String(x.def).replace('.',',')+'%':''].filter(Boolean).join(', ')+')':''}`).join('; '):'nessuno';
+  $('injNames').textContent=S.manual?'Assenze inserite a mano.':((ah||aa)?`Assenti considerati (pesati per importanza). ${h}: ${ah?fmt(ah.list):'dato non disponibile'}. ${a}: ${aa?fmt(aa.list):'dato non disponibile'}.`:'');
+  [['starH',h],['starA',a]].forEach(([id,t])=>{ const on=FAV.includes(t); $(id).textContent=on?'★':'☆'; $(id).className='star'+(on?' on':''); $(id).setAttribute('aria-label',(on?'Rimuovi dai preferiti ':'Aggiungi ai preferiti ')+t); });
   $('ha').value=S.ha; $('haV').textContent=S.ha+'%';
   $('apiWrap').style.display=pred?'':'none';
   renderChips($('formH'),'fH'); renderChips($('formA'),'fA');
@@ -412,7 +409,7 @@ function update(keep){
     <tr><td>Difesa (gol subiti)</td><td>${dec(HT.d*KK[h].d)}</td><td>${dec(AT.d*KK[a].d)}</td></tr>
     <tr><td>Attacco in casa / fuori</td><td>${dec(HT.ah)}</td><td>${dec(AT.aa)}</td></tr>
     <tr><td>Forma (ultime 5)</td><td>${sg(r.fH-1)}</td><td>${sg(r.fA-1)}</td></tr>
-    <tr><td>Assenze (effetto sui gol)</td><td>${S.iH?sg(r.iaH-1):'0%'}</td><td>${S.iA?sg(r.iaA-1):'0%'}</td></tr>
+    <tr><td>Assenze (effetto sui gol)</td><td>${sg(r.iaH-1)}</td><td>${sg(r.iaA-1)}</td></tr>
     <tr><td>Riposo dall'ultima partita</td><td>${rest(F?F.restH:null)}</td><td>${rest(F?F.restA:null)}</td></tr>
     <tr><td>Gol attesi</td><td><b>${dec(r.lh)}</b></td><td><b>${dec(r.la)}</b></td></tr></tbody>`;
   $('why').innerHTML=whyList(r).map(t=>`<li>${esc(t)}</li>`).join('');
@@ -425,8 +422,9 @@ function update(keep){
     $('cmp').innerHTML=`<table class="fac"><thead><tr><th></th><th>Statistico</th><th>APIfootball</th><th>Finale</th></tr></thead><tbody>
       ${row('Vince '+esc(h),r.raw.pH,pred.h,r.pH)}${row('Pareggio',r.raw.pD,pred.d,r.pD)}${row('Vince '+esc(a),r.raw.pA,pred.a,r.pA)}
       ${row('Più di 2,5 gol',r.raw.o25,pred.o25,r.o25)}${row('Segnano entrambe',r.raw.btts,pred.btts,r.btts)}</tbody></table>
-      <p class="hint">${r.used?'Il valore finale unisce i due modelli (70% e 30%).':'Il secondo modello è escluso dal calcolo finale (casella disattivata).'}</p>`;
-  } else $('cmp').innerHTML='<p class="hint">Il modello di APIfootball non ha una previsione per questa partita (o non è incluso nel tuo piano). Il valore finale usa solo il modello statistico.</p>';
+      <p class="hint">${r.used?'Il valore finale unisce i due modelli (70% e 30%).':'Il secondo modello è escluso dal calcolo finale (casella disattivata).'}${r.biasOn?' Correzione automatica attiva, basata su '+BIASN+' previsioni già verificate.':''}</p>`;
+  } else $('cmp').innerHTML='<p class="hint">Il modello di APIfootball non ha una previsione per questa partita (o non è incluso nel tuo piano). Il valore finale usa solo il modello statistico.'+(r.biasOn?' Correzione automatica attiva, basata su '+BIASN+' previsioni già verificate.':'')+'</p>';
+  LASTREL=rl;
   renderLineups();
   renderFixtures();
   loadH2H();
@@ -444,12 +442,19 @@ function renderLineups(){
   box.innerHTML=html;
 }
 function renderFixtures(){
-  if(!FIX.length){ $('fx').innerHTML='<p class="hint">Nessuna partita in programma trovata nei prossimi giorni.</p>'; return; }
-  $('fx').innerHTML=FIX.map((f,i)=>{
-    const h=NAME[f.home],a=NAME[f.away]; if(!h||!a) return '';
+  const q=($('q').value||'').trim().toLowerCase(), only=$('onlyFav').checked;
+  const list=FIX.map((f,i)=>({f,i})).filter(({f})=>{
+    const h=NAME[f.home],a=NAME[f.away]; if(!h||!a) return false;
+    if(q&&!(h.toLowerCase().includes(q)||a.toLowerCase().includes(q))) return false;
+    if(only&&!(FAV.includes(h)||FAV.includes(a))) return false;
+    return true; });
+  if(!list.length){ $('fx').innerHTML='<p class="hint">'+(FIX.length?'Nessuna partita corrisponde alla ricerca.':'Nessuna partita in programma trovata nei prossimi giorni.')+'</p>'; return; }
+  $('fx').innerHTML=list.map(({f,i})=>{
+    const h=NAME[f.home],a=NAME[f.away];
     const r=analyze(h,a,fixOpts(f),f.pred,true);
     const dt=new Date(f.date).toLocaleString('it-IT',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    return `<button type="button" data-i="${i}" class="${F&&F.id===f.id?'sel':''}" aria-label="Analizza ${esc(h)} contro ${esc(a)}"><div class="dt">${dt}</div><div class="nm"><span>${esc(h)}</span><span>${esc(a)}</span></div>
+    const star=(FAV.includes(h)||FAV.includes(a))?' ★':'';
+    return `<button type="button" data-i="${i}" class="${F&&F.id===f.id?'sel':''}" aria-label="Analizza ${esc(h)} contro ${esc(a)}"><div class="dt">${dt}${star}</div><div class="nm"><span>${esc(h)}</span><span>${esc(a)}</span></div>
       <div class="mini"><i style="width:${r.pH*100}%"></i><i style="width:${r.pD*100}%"></i><i style="width:${r.pA*100}%"></i></div>
       <div class="pc"><span>${pct(r.pH)}</span><span>${pct(r.pD)}</span><span>${pct(r.pA)}</span></div></button>`;
   }).join('');
@@ -480,10 +485,12 @@ async function loadH2H(){
 $('selH').onchange=e=>{ S.home=e.target.value; if(S.home===S.away) S.away=names.find(n=>n!==S.home); pick(null); };
 $('selA').onchange=e=>{ S.away=e.target.value; if(S.home===S.away) S.home=names.find(n=>n!==S.away); pick(null); };
 $('swap').onclick=()=>{ [S.home,S.away]=[S.away,S.home]; [S.fH,S.fA]=[S.fA,S.fH]; [S.iH,S.iA]=[S.iA,S.iH]; F=null; update(false); };
-document.querySelectorAll('[data-inj]').forEach(b=>b.onclick=()=>{ const k='i'+b.dataset.inj; S[k]=Math.min(3,Math.max(0,S[k]+ +b.dataset.d)); update(true); });
+document.querySelectorAll('[data-inj]').forEach(b=>b.onclick=()=>{
+  if(!S.manual){ const ah=absOf('h'),aa=absOf('a'); S.iH=ah?Math.min(3,ah.list.length):S.iH; S.iA=aa?Math.min(3,aa.list.length):S.iA; S.manual=true; }
+  const k='i'+b.dataset.inj; S[k]=Math.min(3,Math.max(0,S[k]+ +b.dataset.d)); update(true); });
 $('ha').oninput=e=>{ S.ha=+e.target.value; update(true); };
 $('useApi').onchange=()=>update(true);
-$('reset').onclick=()=>{ TEAMS_KK(); const f=F; S=newState(S.home,S.away); F=f; autoInj(); update(false); };
+$('reset').onclick=()=>{ TEAMS_KK(); const f=F; S=newState(S.home,S.away); F=f; update(false); };
 $('copy').onclick=async()=>{
   const r=analyze(S.home,S.away,opts(),F&&F.pred,$('useApi').checked);
   const txt=`${S.home} - ${S.away}\n1: ${pct(r.pH)}  X: ${pct(r.pD)}  2: ${pct(r.pA)}\n${summaryText(r)}`;
@@ -491,38 +498,129 @@ $('copy').onclick=async()=>{
   setTimeout(()=>{ $('copy').textContent='Copia riepilogo'; },1800);
 };
 function TEAMS_KK(){ names.forEach(n=>{ KK[n]={a:1,d:1}; }); }
-function newState(h,a){ return {home:h,away:a,fH:TEAMS[h].form.slice(),fA:TEAMS[a].form.slice(),iH:0,iA:0,ha:100}; }
+function toggleFav(t){ FAV=FAV.includes(t)?FAV.filter(x=>x!==t):FAV.concat(t); try{ localStorage.setItem('pp_fav',JSON.stringify(FAV)); }catch(e){} update(true); }
+$('starH').onclick=()=>toggleFav(S.home); $('starA').onclick=()=>toggleFav(S.away);
+$('q').oninput=renderFixtures; $('onlyFav').onchange=renderFixtures;
+function newState(h,a){ return {home:h,away:a,fH:TEAMS[h].form.slice(),fA:TEAMS[a].form.slice(),iH:0,iA:0,ha:100,manual:false}; }
 
 /* ---------- caricamento ---------- */
 async function getJSON(u){ const r=await fetch(u); let d; try{ d=await r.json(); }catch(e){ throw new Error('Risposta non valida dal server ('+r.status+')'); } if(!r.ok) throw new Error(d.error||('Errore '+r.status)); return d; }
 async function loadLeague(id,want){
-  CUR=id; $('app').hidden=true; $('state').textContent='Carico i dati del campionato...';
+  CUR=id; $('app').hidden=true; $('accView').hidden=true; $('state').textContent='Carico i dati del campionato...';
+  try{ localStorage.setItem('pp_league',id); }catch(e){}
   [...$('tabs').children].forEach(b=>b.setAttribute('aria-selected',String(b.dataset.id===id)));
   try{
     const d=await getJSON('/api/league?id='+encodeURIComponent(id));
-    TEAMS={}; ID={}; NAME={}; KK={}; INJ={}; F=null; h2Key='';
+    TEAMS={}; ID={}; NAME={}; KK={}; F=null; h2Key=''; D=d; BIAS=d.bias||null; BIASN=d.biasN||0; CUP=!!d.cup;
     d.teams.forEach(t=>{ TEAMS[t.name]=t; ID[t.name]=t.id; NAME[t.id]=t.name; });
     names=Object.keys(TEAMS).sort((x,y)=>x.localeCompare(y,'it')); TEAMS_KK();
     LG=d.lg; FIX=d.fixtures.filter(f=>NAME[f.home]&&NAME[f.away]);
     fillSelects();
     let f0=FIX[0]||null, h=f0?NAME[f0.home]:names[0], a=f0?NAME[f0.away]:names[1];
     if(want&&NAME[want.h]&&NAME[want.a]){ h=NAME[want.h]; a=NAME[want.a]; f0=FIX.find(f=>f.home===want.h&&f.away===want.a)||null; }
-    S=newState(h,a); F=f0; autoInj();
+    S=newState(h,a); F=f0;
     const when=new Date(d.updated).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    $('notice').textContent=`${d.league.name}: dati APIfootball aggiornati ${when}. Strumento di analisi, non di scommesse.`;
+    $('notice').textContent=`${d.league.name}: dati APIfootball aggiornati ${when}.${d.cup?' Valori stimati fra campionati diversi.':''} Strumento di analisi, non di scommesse.`;
     $('state').textContent=''; $('app').hidden=false; update(false);
-    getJSON('/api/injuries?id='+encodeURIComponent(id)).then(j=>{ if(CUR!==id) return; INJ=j.injuries||{}; autoInj(); update(true); }).catch(()=>{});
   }catch(e){ $('state').textContent='Impossibile caricare i dati: '+e.message; }
 }
+async function showAcc(){
+  CUR='acc'; $('app').hidden=true; $('state').textContent=''; $('accView').hidden=false;
+  [...$('tabs').children].forEach(b=>b.setAttribute('aria-selected',String(b.dataset.id==='acc')));
+  $('notice').textContent='Precisione delle previsioni del modello, verificata sui risultati reali.';
+  const box=$('accView'); box.innerHTML='<p class="state">Carico i dati...</p>';
+  try{
+    const a=await getJSON('/api/accuracy');
+    if(!a.enabled){
+      box.innerHTML=`<section class="panel"><h2>Precisione delle previsioni</h2>
+        <p>Questa pagina confronta ogni previsione con il risultato reale, così si vede se il modello ci prende davvero e se le percentuali sono ben calibrate.</p>
+        <p>Non è ancora attiva: serve collegare un piccolo database gratuito (Upstash Redis) al progetto su Vercel e impostare la variabile <b>CRON_SECRET</b>. I passaggi sono nel file LEGGIMI del progetto.</p></section>`; return; }
+    const pc=v=>pct(v,1);
+    let h=`<section class="panel"><h2>Precisione delle previsioni</h2>
+      <p>Ogni giorno il sito salva le previsioni delle partite dei tre giorni successivi e, a partita finita, registra il risultato. Qui vedi come è andato il modello.</p>
+      <div class="cards"><div class="kpi"><div class="v">${a.n}</div><div class="l">partite verificate</div></div><div class="kpi"><div class="v">${a.pending}</div><div class="l">in attesa del risultato</div></div>`;
+    if(a.n){ h+=`<div class="kpi"><div class="v">${pc(a.hit)}</div><div class="l">esito più probabile azzeccato</div></div>
+      <div class="kpi"><div class="v">${dec(a.brier,3)}</div><div class="l">errore Brier (più basso è meglio)</div></div>
+      <div class="kpi"><div class="v">${dec(a.brierBase,3)}</div><div class="l">Brier di chi usa solo le medie del campionato</div></div>`; }
+    h+='</div>';
+    if(a.n<30) h+='<p class="hint">Il campione è ancora piccolo: con pochi risultati i numeri non sono significativi. Servono almeno alcune decine di partite, meglio se centinaia.</p>';
+    else h+=`<p>${a.brier<a.brierBase?`Il modello ha un errore inferiore del ${((1-a.brier/a.brierBase)*100).toFixed(1).replace('.',',')}% rispetto a una previsione basata solo sulle medie del campionato.`:'Per ora il modello non batte una previsione basata solo sulle medie del campionato.'} ${a.bias?'La correzione automatica è attiva (campione oltre 150 partite).':'La correzione automatica si attiva oltre 150 partite verificate.'}</p>`;
+    if(a.bins.length){ h+='<h3 style="margin-top:14px">Calibrazione (vittoria in casa)</h3><p class="hint">Se il modello dice 60%, la vittoria in casa dovrebbe arrivare circa 6 volte su 10.</p><div class="tw"><table class="sm"><thead><tr><th>Probabilità prevista</th><th>Partite</th><th>Media prevista</th><th>Successi reali</th></tr></thead><tbody>'+a.bins.map(b=>`<tr><td>${Math.round(b.lo*100)}-${Math.round(b.hi*100)}%</td><td>${b.n}</td><td>${pc(b.pred)}</td><td>${pc(b.act)}</td></tr>`).join('')+'</tbody></table></div>'; }
+    if(a.recent.length){ h+='<h3 style="margin-top:14px">Ultime partite verificate</h3><div class="tw"><table class="sm"><thead><tr><th>Partita</th><th>Risultato</th><th>1</th><th>X</th><th>2</th></tr></thead><tbody>'+a.recent.map(r=>`<tr><td>${esc(r.home)} - ${esc(r.away)}</td><td>${r.res[0]}-${r.res[1]}</td><td>${pct(r.pH)}</td><td>${pct(r.pD)}</td><td>${pct(r.pA)}</td></tr>`).join('')+'</tbody></table></div>'; }
+    box.innerHTML=h+'</section>';
+  }catch(e){ box.innerHTML=`<p class="state">Impossibile caricare la precisione: ${esc(e.message)}</p>`; }
+}
+
+/* ---------- immagine da condividere ---------- */
+function fitText(g,t,max,size,font){ let sz=size; do{ g.font=`700 ${sz}px ${font}`; sz-=2; }while(g.measureText(t).width>max&&sz>24); }
+async function shareImage(){
+  const r=analyze(S.home,S.away,opts(),F&&F.pred,$('useApi').checked);
+  const c=document.createElement('canvas'); c.width=1080; c.height=1350; const g=c.getContext('2d');
+  if(!g){ alert('Immagine non supportata da questo browser.'); return; }
+  const font="'Barlow Condensed','Arial Narrow',Impact,sans-serif", body="'Barlow',system-ui,sans-serif";
+  g.fillStyle='#101B2B'; g.fillRect(0,0,1080,1350);
+  g.fillStyle='#fff'; g.textAlign='left'; g.font=`700 54px ${font}`; g.fillText('Prepartita',60,100);
+  g.fillStyle='#93A0B4'; g.font=`500 30px ${body}`; g.textAlign='right';
+  const dt=F?new Date(F.date).toLocaleString('it-IT',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'';
+  g.fillText((D?D.league.name:'')+(dt?' · '+dt:''),1020,96);
+  g.textAlign='center'; g.fillStyle='#fff';
+  fitText(g,S.home,960,110,font); g.fillText(S.home,540,290);
+  g.fillStyle='#93A0B4'; g.font=`500 40px ${body}`; g.fillText('contro',540,360);
+  g.fillStyle='#fff'; fitText(g,S.away,960,110,font); g.fillText(S.away,540,470);
+  const x0=60,w=960,y=560; let x=x0;
+  [[r.pH,'#3CC489'],[r.pD,'#6B788C'],[r.pA,'#FF8A4C']].forEach(([p,col])=>{ g.fillStyle=col; g.fillRect(x,y,w*p,44); x+=w*p; });
+  g.font=`700 150px ${font}`;
+  g.fillStyle='#3CC489'; g.textAlign='left'; g.fillText(pct(r.pH),60,800);
+  g.fillStyle='#93A0B4'; g.textAlign='center'; g.fillText(pct(r.pD),540,800);
+  g.fillStyle='#FF8A4C'; g.textAlign='right'; g.fillText(pct(r.pA),1020,800);
+  g.font=`500 30px ${body}`; g.fillStyle='#93A0B4'; g.textAlign='left'; g.fillText('Vittoria casa',60,850); g.textAlign='center'; g.fillText('Pareggio',540,850); g.textAlign='right'; g.fillText('Vittoria trasferta',1020,850);
+  g.textAlign='left'; g.fillStyle='#fff'; g.font=`600 40px ${body}`;
+  g.fillText(`Gol attesi: ${dec(r.lh)} - ${dec(r.la)}`,60,970);
+  g.fillText(`Risultato più probabile: ${r.top[0][0]}-${r.top[0][1]} (${pct(r.top[0][2],1)})`,60,1035);
+  g.fillText(`Più di 2,5 gol: ${pct(r.o25)}   Segnano entrambe: ${pct(r.btts)}`,60,1100);
+  if(LASTREL){ g.fillStyle='#93A0B4'; g.font=`500 34px ${body}`; g.fillText(`Affidabilità dei dati: ${LASTREL.lv}`,60,1165); }
+  g.fillStyle='#93A0B4'; g.font=`500 26px ${body}`; g.textAlign='center';
+  g.fillText('Stime statistiche: non sono un consiglio di giocata e non garantiscono alcun risultato.',540,1290);
+  c.toBlob(async blob=>{
+    if(!blob) return;
+    const file=new File([blob],'prepartita.png',{type:'image/png'});
+    try{
+      if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:`${S.home} - ${S.away}`}); return; }
+    }catch(e){ if(e&&e.name==='AbortError') return; }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='prepartita.png'; document.body.appendChild(a); a.click(); a.remove();
+  },'image/png');
+}
+$('share').onclick=shareImage;
+
+/* ---------- commento AI ---------- */
+const AIC={};
+$('aiBtn').onclick=async()=>{
+  const btn=$('aiBtn'), box=$('aiBox'); const r=analyze(S.home,S.away,opts(),F&&F.pred,$('useApi').checked);
+  const absN=side=>{ const a=absOf(side); return a&&a.list?a.list.map(x=>x.name+(x.role?' ('+x.role+')':'')):[]; };
+  const body={league:D?D.league.name:'',home:S.home,away:S.away,pH:r.pH,pD:r.pD,pA:r.pA,o25:r.o25,btts:r.btts,lh:r.lh,la:r.la,top:`${r.top[0][0]}-${r.top[0][1]}`,rel:LASTREL?LASTREL.lv:'',formH:S.fH,formA:S.fA,absH:absN('h'),absA:absN('a'),cup:CUP,why:whyList(r)};
+  const sig=JSON.stringify(body); box.hidden=false;
+  if(AIC[sig]){ box.innerHTML=AIC[sig]; return; }
+  btn.disabled=true; box.innerHTML='<p class="hint">Sto scrivendo il commento...</p>';
+  try{
+    const res=await fetch('/api/commento',{method:'POST',headers:{'Content-Type':'application/json'},body:sig}); const j=await res.json();
+    if(!res.ok) throw new Error(j.error||('Errore '+res.status));
+    const html='<h2>Commento</h2>'+j.text.split(/\n+/).map(t=>`<p>${esc(t)}</p>`).join('')+'<p class="hint">Testo generato da un\'AI a partire dai dati mostrati in pagina: può contenere imprecisioni e non è un consiglio di giocata.</p>';
+    AIC[sig]=html; box.innerHTML=html;
+  }catch(e){ box.innerHTML=`<p class="hint">Commento non disponibile: ${esc(e.message)}</p>`; }
+  btn.disabled=false;
+};
+
 async function boot(){
   try{
-    const d=await getJSON('/api/leagues'); LEAGUES=d.leagues;
-    $('tabs').innerHTML=LEAGUES.map(l=>`<button class="tab" role="tab" data-id="${esc(l.id)}" aria-selected="false">${esc(l.name)} <span style="opacity:.6">${esc(l.country)}</span></button>`).join('');
-    [...$('tabs').children].forEach(b=>b.onclick=()=>{ history.replaceState(null,'','#l='+b.dataset.id); loadLeague(b.dataset.id); });
-    const p=new URLSearchParams(location.hash.slice(1)); const id=LEAGUES.some(l=>l.id===p.get('l'))?p.get('l'):LEAGUES[0].id;
+    const d=await getJSON('/api/leagues'); LEAGUES=d.leagues; FEAT=d.features||FEAT; $('aiBtn').hidden=!FEAT.ai;
+    $('tabs').innerHTML=LEAGUES.map(l=>`<button class="tab" role="tab" data-id="${esc(l.id)}" aria-selected="false">${esc(l.name)} <span style="opacity:.6">${esc(l.country)}</span></button>`).join('')+'<button class="tab acc" role="tab" data-id="acc" aria-selected="false">Precisione</button>';
+    [...$('tabs').children].forEach(b=>b.onclick=()=>{ if(b.dataset.id==='acc'){ showAcc(); return; } history.replaceState(null,'','#l='+b.dataset.id); loadLeague(b.dataset.id); });
+    const p=new URLSearchParams(location.hash.slice(1)); let saved=''; try{ saved=localStorage.getItem('pp_league')||''; }catch(e){}
+    const id=LEAGUES.some(l=>l.id===p.get('l'))?p.get('l'):LEAGUES.some(l=>l.id===saved)?saved:LEAGUES[0].id;
     loadLeague(id,p.get('h')&&p.get('a')?{h:p.get('h'),a:p.get('a')}:null);
   }catch(e){ $('notice').textContent='Impossibile caricare i dati: '+e.message; $('state').textContent='Non riesco a leggere i campionati. Riprova tra poco.'; }
 }
+if('serviceWorker' in navigator) window.addEventListener('load',()=>{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); });
 boot();
 </script>
 </body>
