@@ -2,6 +2,7 @@
 const { listLeagues, hasRedis, redis, redisPipe } = require('./_common');
 const { buildLeague } = require('./_league');
 const { buildCup } = require('./_cup');
+const { buildNation } = require('./_nation');
 const { readAll } = require('./_track');
 const Model = require('../public/model.js');
 
@@ -18,7 +19,7 @@ module.exports = async (req, res) => {
     const leagues = await listLeagues();
     for (const l of leagues) {
       let d;
-      try { d = l.kind === 'cup' ? await buildCup(l) : await buildLeague(l.id); } catch (_) { continue; }
+      try { d = l.kind === 'cup' ? await buildCup(l) : l.kind === 'nation' ? await buildNation(l) : await buildLeague(l.id); } catch (_) { continue; }
       const T = {}, ID = {};
       d.teams.forEach(t => { T[t.name] = t; ID[t.id] = t.name; });
       const ctx = { T, K: {}, LG: d.lg, bias: null }; // si salva la previsione senza correzione automatica

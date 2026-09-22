@@ -40,16 +40,37 @@ const DEFS = [
   ['Netherlands', 'eredivisie'],
   ['Portugal', 'primeira liga']
 ];
-// Coppe europee: riconosciute dal nome, nel paese "Eurocups"
+// Coppe per club: riconosciute SOLO dal nome della competizione, non dal paese
+// (i fornitori etichettano il paese delle coppe in modi diversi, quindi non ci affidiamo a quello)
+// Esclusioni generiche per le coppe per CLUB (qui "qualif" va escluso: vogliamo solo la fase a gironi/eliminazione, non i turni preliminari)
+const EXCL_CLUB = /women|femminile|qualif|play-?off|preliminary|u-?1[5-9]|u-?20|u-?21|u-?23|youth|beach|futsal|amateur|reserve|b-team|primavera/i;
 const CUPS = [
-  { key: 'ucl', test: n => n.includes('champions league') && !/women|qualif|play-?off|youth/.test(n) },
-  { key: 'uel', test: n => n.includes('europa league') && !/conference|women|qualif|play-?off|youth/.test(n) }
+  { key: 'ucl', test: n => /champions league/i.test(n) && !EXCL_CLUB.test(n) },
+  { key: 'uel', test: n => /europa league/i.test(n) && !/conference/i.test(n) && !EXCL_CLUB.test(n) }
 ];
+// Esclusioni per le NAZIONALI: qui NON escludiamo "qualif", perché le qualificazioni sono proprio ciò che cerchiamo
+const EXCL_NAT = /women|femminile|u-?1[5-9]|u-?20|u-?21|u-?23|youth|beach|futsal|amateur/i;
+// Nazionali: scoperte per nome fra TUTTE le competizioni, qualunque sia il paese associato
+const NATIONS = [
+  { key: 'nl', label: 'UEFA Nations League', test: n => /nations league/i.test(n) && !EXCL_NAT.test(n) },
+  { key: 'wcq', label: 'Qualificazioni Mondiali', test: n => /world cup/i.test(n) && /qualif/i.test(n) && !EXCL_NAT.test(n) },
+  { key: 'euq', label: 'Qualificazioni Europei', test: n => /(european championship|euro(?!pa))/i.test(n) && /qualif/i.test(n) && !EXCL_NAT.test(n) },
+  { key: 'wc', label: 'Mondiali', test: n => /world cup/i.test(n) && !/qualif/i.test(n) && !EXCL_NAT.test(n) },
+  { key: 'euf', label: 'Europei', test: n => /european championship/i.test(n) && !/qualif/i.test(n) && !EXCL_NAT.test(n) },
+  { key: 'fr', label: 'Amichevoli internazionali', test: n => /international friendl/i.test(n) && !EXCL_NAT.test(n) }
+];
+const MAX_NATIONS = 10; // limite di sicurezza: non riempire le schede con troppe competizioni minori
 
-let cache = null;
+let cache = null, allCache = null;
+async function allLeaguesRaw() {
+  if (allCache && Date.now() - allCache.t < 6 * 60 * 1000) return allCache.v;
+  const v = await afGet({ action: 'get_leagues' });
+  allCache = { t: Date.now(), v };
+  return v;
+}
 async function listLeagues() {
   if (cache && Date.now() - cache.t < 6 * 60 * 1000) return cache.v;
-  const all = await afGet({ action: 'get_leagues' });
+  const all = await allLeaguesRaw();
   const out = [];
   const pickLatest = arr => arr.sort((x, y) => String(y.league_season).localeCompare(String(x.league_season)))[0];
   for (const [country, name] of DEFS) {
@@ -61,11 +82,35 @@ async function listLeagues() {
     out.push({ id: String(f.league_id), name: f.league_name, country: f.country_name, logo: f.league_logo || null, season: f.league_season, kind: 'league' });
   }
   for (const cup of CUPS) {
-    const c = all.filter(l => String(l.country_name).trim().toLowerCase() === 'eurocups' && cup.test(String(l.league_name).trim().toLowerCase()));
+    const c = all.filter(l => cup.test(String(l.league_name || '').trim()));
     if (!c.length) continue;
     const f = pickLatest(c);
     out.push({ id: String(f.league_id), name: f.league_name, country: 'Europa', logo: f.league_logo || null, season: f.league_season, kind: 'cup' });
   }
+  const seen = new Set();
+  const nats = [];
+  for (const nat of NATIONS) {
+    const matches = all.filter(l => nat.test(String(l.league_name || '').trim()));
+    // per ogni tipo possono esserci più zone/gironi (es. per confederazione): le teniamo tutte,
+    // ma solo una stagione per ciascuna, e diamo priorità a UEFA/Europa quando il nome lo indica
+    const byName = new Map();
+    matches.forEach(l => {
+      const k = String(l.league_name).trim().toLowerCase();
+      if (!byName.has(k)) byName.set(k, []);
+      byName.get(k).push(l);
+    });
+    for (const [, arr] of byName) {
+      const f = pickLatest(arr);
+      const idKey = String(f.league_id);
+      if (seen.has(idKey)) continue;
+      seen.add(idKey);
+      const uefa = /uefa|europe/i.test(f.league_name) || /europe/i.test(String(f.country_name));
+      nats.push({ id: idKey, name: f.league_name, country: f.country_name || 'Nazionali', logo: f.league_logo || null, season: f.league_season, kind: 'nation', _prio: uefa ? 0 : 1 });
+    }
+  }
+  nats.sort((a, b) => a._prio - b._prio || a.name.localeCompare(b.name));
+  nats.slice(0, MAX_NATIONS).forEach(n => { delete n._prio; out.push(n); });
+
   cache = { t: Date.now(), v: out };
   return out;
 }

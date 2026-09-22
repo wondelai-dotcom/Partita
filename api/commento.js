@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
       pH: pc(b.pH), pD: pc(b.pD), pA: pc(b.pA), o25: pc(b.o25), btts: pc(b.btts),
       lh: (Number(b.lh) || 0).toFixed(2), la: (Number(b.la) || 0).toFixed(2),
       top: str(b.top, 20), rel: str(b.rel, 10), formH: arr(b.formH, 5).join(''), formA: arr(b.formA, 5).join(''),
-      absH: arr(b.absH), absA: arr(b.absA), cup: !!b.cup, why: arr(b.why, 5)
+      absH: arr(b.absH), absA: arr(b.absA), cup: !!b.cup, nation: !!b.nation, why: arr(b.why, 5)
     };
     if (!d.home || !d.away) return res.status(400).json({ error: 'Dati mancanti' });
 
@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
     if (hasRedis()) { const c = await redis(['GET', cacheKey]); if (c) return res.status(200).json({ text: c, cached: true }); }
 
     const system = "Sei un analista di calcio che scrive in italiano per un sito di analisi prepartita. Usa SOLO i dati forniti, senza inventare informazioni su giocatori, infortuni o notizie. Scrivi 4-6 frasi in prosa, senza elenchi né markdown. Spiega perché il modello indica quelle probabilità, cita i fattori più importanti e ricorda in modo naturale che il calcio è imprevedibile. Non dare consigli di giocata, non citare quote né scommesse.";
-    const user = `Competizione: ${d.league}${d.cup ? ' (coppa europea, valori stimati fra campionati diversi)' : ''}
+    const user = `Competizione: ${d.league}${d.cup ? ' (coppa europea, valori stimati fra campionati diversi)' : ''}${d.nation ? ' (nazionali: pochissime partite disponibili fra loro, stima meno solida)' : ''}
 Partita: ${d.home} (casa) - ${d.away} (trasferta)
 Probabilità: vittoria ${d.home} ${d.pH}%, pareggio ${d.pD}%, vittoria ${d.away} ${d.pA}%
 Gol attesi: ${d.lh} per ${d.home}, ${d.la} per ${d.away}. Risultato più probabile: ${d.top}
