@@ -154,6 +154,10 @@ table.sm th:first-child,table.sm td:first-child{text-align:left}
   <div id="accView" hidden></div>
 
   <div id="app" hidden>
+    <section id="todaySec" aria-labelledby="td-h" hidden style="margin-bottom:26px">
+      <h2 id="td-h">Partite di oggi</h2>
+      <div class="fx" id="today"></div>
+    </section>
     <section aria-labelledby="fx-h">
       <h2 id="fx-h">Prossime partite</h2>
       <div class="fxbar">
@@ -285,7 +289,7 @@ const dec = (x,d=2)=> x.toFixed(d).replace('.',',');
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let LEAGUES=[], CUR=null;
-let TEAMS={}, ID={}, NAME={}, KK={}, LG={h:1.5,a:1.2,base:{h:.45,d:.26,a:.29}}, FIX=[], F=null, names=[], S=null, D=null, BIAS=null, BIASN=0, CUP=false, FEAT={track:false,ai:false}, FAV=[], LASTREL=null;
+let TEAMS={}, ID={}, NAME={}, KK={}, LG={h:1.5,a:1.2,base:{h:.45,d:.26,a:.29}}, FIX=[], F=null, names=[], S=null, D=null, BIAS=null, BIASN=0, CUP=false, NAT=false, FEAT={track:false,ai:false}, FAV=[], LASTREL=null, TODAY=[], DIAG=null;
 try{ FAV=JSON.parse(localStorage.getItem('pp_fav')||'[]'); }catch(e){ FAV=[]; }
 
 /* ---------- modello (in model.js) ---------- */
@@ -316,6 +320,7 @@ function reliability(r){
   else { sc+=4; why.push('Formazioni non ancora note: le assenze sono stimate dai giocatori infortunati.'); }
   if(F&&F.hasLineup){ sc+=15; } else if(absOf('h')&&absOf('a')){ sc+=10; } else { sc+=5; why.push('Dati sugli infortuni non disponibili.'); }
   if(CUP){ sc-=10; why.push('Coppa europea: squadre di campionati diversi, i valori sono più stimati che misurati.'); }
+  if(NAT){ sc-=15; why.push('Nazionali: pochissime partite fra loro, quindi i valori sono meno solidi di un campionato.'); const lo=(TEAMS[S.home]&&TEAMS[S.home].lowData)||(TEAMS[S.away]&&TEAMS[S.away].lowData); if(lo) why.push('Una delle due squadre ha giocato molto poco di recente: stima ancora incerta.'); }
   if(F&&F.restH!=null&&F.restA!=null&&(F.restH<=3||F.restA<=3)) why.push('Una delle due squadre ha giocato da poco (3 giorni o meno): possibile stanchezza.');
   const mx=Math.max(r.pH,r.pD,r.pA);
   if(mx<.45) why.push('Partita molto equilibrata: nessun esito supera il 45%.');
@@ -367,6 +372,7 @@ function whyList(r){
   if(!S.manual&&((ah&&ah.list.length)||(aa&&aa.list.length))) out.push(`Assenze pesate per importanza: ${ah?ah.list.length:0} per ${h}, ${aa?aa.list.length:0} per ${a}.`);
   else if(S.manual&&(S.iH||S.iA)) out.push(`Assenze inserite a mano: ${S.iH} per ${h}, ${S.iA} per ${a}.`);
   if(CUP) out.push('Coppa europea: le valutazioni dei campionati nazionali sono corrette con un fattore di forza del campionato (stima indicativa).');
+  if(NAT) out.push('Nazionali: valori basati solo sulle ultime partite di ciascuna squadra, senza classifica di campionato; il fattore campo conta meno perché diverse gare si giocano in campo neutro.');
   if(r.rH<1||r.rA<1) out.push('Giorni di riposo ridotti per '+(r.rH<1&&r.rA<1?'entrambe le squadre':r.rH<1?h:a)+': piccola riduzione dei gol attesi.');
   return out;
 }
@@ -426,6 +432,7 @@ function update(keep){
   } else $('cmp').innerHTML='<p class="hint">Il modello di APIfootball non ha una previsione per questa partita (o non è incluso nel tuo piano). Il valore finale usa solo il modello statistico.'+(r.biasOn?' Correzione automatica attiva, basata su '+BIASN+' previsioni già verificate.':'')+'</p>';
   LASTREL=rl;
   renderLineups();
+  renderToday();
   renderFixtures();
   loadH2H();
 }
@@ -448,7 +455,14 @@ function renderFixtures(){
     if(q&&!(h.toLowerCase().includes(q)||a.toLowerCase().includes(q))) return false;
     if(only&&!(FAV.includes(h)||FAV.includes(a))) return false;
     return true; });
-  if(!list.length){ $('fx').innerHTML='<p class="hint">'+(FIX.length?'Nessuna partita corrisponde alla ricerca.':'Nessuna partita in programma trovata nei prossimi giorni.')+'</p>'; return; }
+  if(!list.length){
+    let msg=FIX.length?'Nessuna partita corrisponde alla ricerca.':'Nessuna partita in programma trovata nei prossimi giorni.';
+    let det='';
+    if(!FIX.length&&DIAG){
+      const st=Object.entries(DIAG.statuses||{}).map(([k,v])=>k+': '+v).join(', ');
+      det=`<p class="hint">Dettagli tecnici. Stagione del campionato: ${esc(DIAG.leagueSeason||'?')}. Eventi futuri ricevuti da APIfootball: ${DIAG.future}${st?' ('+esc(st)+')':''}. Partite giocate nelle ultime settimane: ${DIAG.finished}${DIAG.lastPast?', l\'ultima il '+esc(DIAG.lastPast):''}.${DIAG.errFut?' Errore nella richiesta del calendario: '+esc(DIAG.errFut)+'.':''}${DIAG.future===0&&!DIAG.errFut?' Il calendario futuro non risulta disponibile per questo campionato nel tuo piano.':''}</p>`;
+    }
+    $('fx').innerHTML='<div><p class="hint">'+msg+'</p>'+det+'</div>'; return; }
   $('fx').innerHTML=list.map(({f,i})=>{
     const h=NAME[f.home],a=NAME[f.away];
     const r=analyze(h,a,fixOpts(f),f.pred,true);
@@ -461,6 +475,23 @@ function renderFixtures(){
   $('fx').querySelectorAll('button').forEach(b=>b.onclick=()=>{
     const f=FIX[+b.dataset.i]; S.home=NAME[f.home]; S.away=NAME[f.away]; pick(f);
     $('analysis').scrollIntoView({behavior:'smooth'});
+  });
+}
+function renderToday(){
+  const sec=$('todaySec'), list=TODAY.filter(t=>NAME[t.home]&&NAME[t.away]);
+  if(!list.length){ sec.hidden=true; return; }
+  sec.hidden=false;
+  $('today').innerHTML=list.map((t,i)=>{
+    const h=NAME[t.home],a=NAME[t.away];
+    const st=t.finished?`Finita ${t.hg}-${t.ag}`:t.live?`In corso ${t.hg}-${t.ag}`:t.upcoming?`Ore ${esc(t.time)}`:esc(t.status||'');
+    const r=analyze(h,a,{fH:TEAMS[h].form,fA:TEAMS[a].form,iH:0,iA:0,ha:100,absH:teamAbs(TEAMS[h]),absA:teamAbs(TEAMS[a]),restH:null,restA:null},null,false);
+    return `<button type="button" data-i="${i}" aria-label="Analizza ${esc(h)} contro ${esc(a)}"><div class="dt">${st}</div><div class="nm"><span>${esc(h)}</span><span>${esc(a)}</span></div>
+      <div class="mini"><i style="width:${r.pH*100}%"></i><i style="width:${r.pD*100}%"></i><i style="width:${r.pA*100}%"></i></div>
+      <div class="pc"><span>${pct(r.pH)}</span><span>${pct(r.pD)}</span><span>${pct(r.pA)}</span></div></button>`;
+  }).join('');
+  $('today').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const t=list[+b.dataset.i]; S.home=NAME[t.home]; S.away=NAME[t.away];
+    pick(FIX.find(f=>f.id===t.id)||null); $('analysis').scrollIntoView({behavior:'smooth'});
   });
 }
 const H2C={}; let h2Key='';
@@ -511,7 +542,7 @@ async function loadLeague(id,want){
   [...$('tabs').children].forEach(b=>b.setAttribute('aria-selected',String(b.dataset.id===id)));
   try{
     const d=await getJSON('/api/league?id='+encodeURIComponent(id));
-    TEAMS={}; ID={}; NAME={}; KK={}; F=null; h2Key=''; D=d; BIAS=d.bias||null; BIASN=d.biasN||0; CUP=!!d.cup;
+    TEAMS={}; ID={}; NAME={}; KK={}; F=null; h2Key=''; D=d; TODAY=d.today||[]; DIAG=d.diag||null; BIAS=d.bias||null; BIASN=d.biasN||0; CUP=!!d.cup; NAT=!!d.nation;
     d.teams.forEach(t=>{ TEAMS[t.name]=t; ID[t.name]=t.id; NAME[t.id]=t.name; });
     names=Object.keys(TEAMS).sort((x,y)=>x.localeCompare(y,'it')); TEAMS_KK();
     LG=d.lg; FIX=d.fixtures.filter(f=>NAME[f.home]&&NAME[f.away]);
@@ -520,7 +551,7 @@ async function loadLeague(id,want){
     if(want&&NAME[want.h]&&NAME[want.a]){ h=NAME[want.h]; a=NAME[want.a]; f0=FIX.find(f=>f.home===want.h&&f.away===want.a)||null; }
     S=newState(h,a); F=f0;
     const when=new Date(d.updated).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    $('notice').textContent=`${d.league.name}: dati APIfootball aggiornati ${when}.${d.cup?' Valori stimati fra campionati diversi.':''} Strumento di analisi, non di scommesse.`;
+    $('notice').textContent=`${d.league.name}: dati APIfootball aggiornati ${when}.${d.cup?' Valori stimati fra campionati diversi.':''}${d.nation?' Solo ultime partite, senza classifica di campionato.':''} Strumento di analisi, non di scommesse.`;
     $('state').textContent=''; $('app').hidden=false; update(false);
   }catch(e){ $('state').textContent='Impossibile caricare i dati: '+e.message; }
 }
@@ -597,7 +628,7 @@ const AIC={};
 $('aiBtn').onclick=async()=>{
   const btn=$('aiBtn'), box=$('aiBox'); const r=analyze(S.home,S.away,opts(),F&&F.pred,$('useApi').checked);
   const absN=side=>{ const a=absOf(side); return a&&a.list?a.list.map(x=>x.name+(x.role?' ('+x.role+')':'')):[]; };
-  const body={league:D?D.league.name:'',home:S.home,away:S.away,pH:r.pH,pD:r.pD,pA:r.pA,o25:r.o25,btts:r.btts,lh:r.lh,la:r.la,top:`${r.top[0][0]}-${r.top[0][1]}`,rel:LASTREL?LASTREL.lv:'',formH:S.fH,formA:S.fA,absH:absN('h'),absA:absN('a'),cup:CUP,why:whyList(r)};
+  const body={league:D?D.league.name:'',home:S.home,away:S.away,pH:r.pH,pD:r.pD,pA:r.pA,o25:r.o25,btts:r.btts,lh:r.lh,la:r.la,top:`${r.top[0][0]}-${r.top[0][1]}`,rel:LASTREL?LASTREL.lv:'',formH:S.fH,formA:S.fA,absH:absN('h'),absA:absN('a'),cup:CUP,nation:NAT,why:whyList(r)};
   const sig=JSON.stringify(body); box.hidden=false;
   if(AIC[sig]){ box.innerHTML=AIC[sig]; return; }
   btn.disabled=true; box.innerHTML='<p class="hint">Sto scrivendo il commento...</p>';
@@ -613,7 +644,7 @@ $('aiBtn').onclick=async()=>{
 async function boot(){
   try{
     const d=await getJSON('/api/leagues'); LEAGUES=d.leagues; FEAT=d.features||FEAT; $('aiBtn').hidden=!FEAT.ai;
-    $('tabs').innerHTML=LEAGUES.map(l=>`<button class="tab" role="tab" data-id="${esc(l.id)}" aria-selected="false">${esc(l.name)} <span style="opacity:.6">${esc(l.country)}</span></button>`).join('')+'<button class="tab acc" role="tab" data-id="acc" aria-selected="false">Precisione</button>';
+    $('tabs').innerHTML=LEAGUES.map(l=>`<button class="tab" role="tab" data-id="${esc(l.id)}" aria-selected="false">${esc(l.name)} <span style="opacity:.6">${esc(l.kind==='nation'?'Nazionali':l.country)}</span></button>`).join('')+'<button class="tab acc" role="tab" data-id="acc" aria-selected="false">Precisione</button>';
     [...$('tabs').children].forEach(b=>b.onclick=()=>{ if(b.dataset.id==='acc'){ showAcc(); return; } history.replaceState(null,'','#l='+b.dataset.id); loadLeague(b.dataset.id); });
     const p=new URLSearchParams(location.hash.slice(1)); let saved=''; try{ saved=localStorage.getItem('pp_league')||''; }catch(e){}
     const id=LEAGUES.some(l=>l.id===p.get('l'))?p.get('l'):LEAGUES.some(l=>l.id===saved)?saved:LEAGUES[0].id;
