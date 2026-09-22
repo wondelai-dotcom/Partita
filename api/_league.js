@@ -71,7 +71,9 @@ function predMap(preds) {
   });
   return pm;
 }
-const isUpcoming = m => m.match_status === '' && m.match_hometeam_score === '';
+// In programma = senza punteggio e non rinviata/annullata (tollera stati diversi da "vuoto")
+const isUpcoming = m => m.match_hometeam_score === '' && !DONE.includes(m.match_status) && !['Postponed', 'Cancelled', 'Awarded'].includes(m.match_status);
+const romeDay = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
 
 const memo = new Map();
 async function buildLeague(lid) {
@@ -85,12 +87,18 @@ async function buildLeague(lid) {
 async function build(lid) {
   const L = await checkedLeague(lid);
   const now = new Date();
-  const from = ymd(new Date(now.getTime() - 75 * 864e5)), to = ymd(new Date(now.getTime() + 21 * 864e5));
+  const today = romeDay(now);
+  const from = ymd(new Date(now.getTime() - 75 * 864e5)), to = ymd(new Date(now.getTime() + 30 * 864e5));
   const st = await afGet({ action: 'get_standings', league_id: L.id });
   if (!st.length) { const e = new Error('Classifica non disponibile per questo campionato'); e.status = 502; throw e; }
-  const ev = await afGet({ action: 'get_events', from, to, league_id: L.id });
+  // passato (forma, statistiche) e calendario (da oggi in poi) in due richieste separate
+  let past = [], fut = [], errPast = '', errFut = '';
+  try { past = await afGet({ action: 'get_events', from, to: ymd(new Date(now.getTime() - 864e5)), league_id: L.id }); } catch (e) { errPast = e.message; }
+  try { fut = await afGet({ action: 'get_events', from: today, to, league_id: L.id }); } catch (e) { errFut = e.message; }
+  const seen = new Set(); const ev = [];
+  [].concat(Array.isArray(past) ? past : [], Array.isArray(fut) ? fut : []).forEach(m => { const k = String(m.match_id); if (!seen.has(k)) { seen.add(k); ev.push(m); } });
   let preds = [], tdata = [];
-  try { preds = await afGet({ action: 'get_predictions', from: ymd(now), to, league_id: L.id }); } catch (_) {}
+  try { preds = await afGet({ action: 'get_predictions', from: today, to, league_id: L.id }); } catch (_) {}
   try { tdata = await afGet({ action: 'get_teams', league_id: L.id }); } catch (_) {}
 
   const P = {};
@@ -158,10 +166,23 @@ async function build(lid) {
   const lastCopy = Object.assign({}, last);
   const fixtures = ev.filter(isUpcoming).sort((a, b) => stamp(a) - stamp(b)).slice(0, 14).map(m => makeFixture(m, lastCopy, P, pm));
 
+  const todayList = ev.filter(m => m.match_date === today).sort((a, b) => stamp(a) - stamp(b)).map(m => ({
+    id: String(m.match_id), home: String(m.match_hometeam_id), away: String(m.match_awayteam_id),
+    time: m.match_time || '', status: m.match_status || '', hg: m.match_hometeam_score, ag: m.match_awayteam_score,
+    live: String(m.match_live) === '1', finished: DONE.includes(m.match_status), upcoming: isUpcoming(m)
+  }));
+  const futArr = Array.isArray(fut) ? fut : [];
+  const statuses = {}; futArr.forEach(m => { const k = m.match_status === '' ? '(vuoto)' : m.match_status; statuses[k] = (statuses[k] || 0) + 1; });
+  const diag = {
+    leagueSeason: L.season || '', today, future: futArr.length, upcoming: futArr.filter(isUpcoming).length,
+    past: (Array.isArray(past) ? past : []).length, finished: finished.length, statuses,
+    firstFuture: futArr.length ? futArr.map(m => m.match_date).sort()[0] : '', lastPast: finished.length ? finished[finished.length - 1].match_date : '',
+    errFut, errPast
+  };
   return {
     updated: new Date().toISOString(), season: seasonYear(),
     league: { id: L.id, name: L.name, country: L.country },
-    played: Math.round(gp / 2), lg: { h: LGh, a: LGa, base }, teams, fixtures,
+    played: Math.round(gp / 2), lg: { h: LGh, a: LGa, base }, teams, fixtures, today: todayList, diag,
     // usati solo dal server (non inviati al browser)
     _results: results, _last: last, _players: P
   };
