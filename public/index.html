@@ -150,10 +150,56 @@ table.sm th:first-child,table.sm td:first-child{text-align:left}
     <div class="notice" id="notice">Carico i campionati...</div>
   </header>
 
+  <nav class="tabs" id="sports" role="tablist" aria-label="Sport">
+    <button class="tab" role="tab" data-sport="football" aria-selected="true">⚽ Calcio</button>
+    <button class="tab" role="tab" data-sport="tennis" aria-selected="false">🎾 Tennis</button>
+  </nav>
   <nav class="tabs" id="cats" role="tablist" aria-label="Categoria"></nav>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Competizione"></nav>
   <div class="state" id="state" role="status"></div>
   <div id="accView" hidden></div>
+
+  <div id="tennisApp" hidden>
+    <nav class="tabs" id="tTabs" role="tablist" aria-label="Torneo"></nav>
+    <div id="tState" class="state" role="status"></div>
+    <div id="tContent" hidden>
+      <section aria-labelledby="tfx-h">
+        <h2 id="tfx-h">Prossime partite</h2>
+        <div class="fx" id="tfx"></div>
+      </section>
+      <section class="hero" aria-labelledby="tan-h" id="tAnalysis">
+        <h2 id="tan-h">Analisi del match</h2>
+        <div class="pickers">
+          <div class="pick h"><label for="tSelA">Giocatore 1</label><select id="tSelA"></select></div>
+          <button class="swap" id="tSwap" type="button" aria-label="Inverti i due giocatori">Inverti</button>
+          <div class="pick a"><label for="tSelB">Giocatore 2</label><select id="tSelB"></select></div>
+        </div>
+        <div class="bar" role="img" id="tBarBox" aria-label="Probabilità"><div class="bh" id="tBA" style="background:var(--home)"></div><div class="ba" id="tBB" style="background:var(--away)"></div></div>
+        <div class="nums" aria-live="polite">
+          <div class="num h"><div class="v" id="tNA">–</div><div class="l" id="tLA">Vince</div></div>
+          <div class="num d"></div>
+          <div class="num a"><div class="v" id="tNB">–</div><div class="l" id="tLB">Vince</div></div>
+        </div>
+        <p class="summary" id="tSummary"></p>
+      </section>
+      <div class="grid">
+        <div class="panel" aria-labelledby="tw-h">
+          <h2 id="tw-h">Cosa pesa sul risultato</h2>
+          <ul class="why" id="tWhy"></ul>
+          <table class="fac" id="tFac" style="margin-top:10px"></table>
+        </div>
+        <div class="panel" aria-labelledby="th2h-h">
+          <h2 id="th2h-h">Scontri diretti</h2>
+          <div id="tH2h"></div>
+        </div>
+      </div>
+      <section class="panel how sec" aria-labelledby="thow-h">
+        <h2 id="thow-h">Come viene calcolato</h2>
+        <p>La stima parte dalla classifica ATP/WTA (i punti contano più della semplice posizione), e la corregge con il rendimento recente, quello sulla superficie di questo torneo e gli scontri diretti fra i due giocatori, quando ce ne sono a sufficienza.</p>
+        <p>È una prima versione: rispetto al modello del calcio, qui manca ancora una verifica delle previsioni sui risultati reali.</p>
+      </section>
+    </div>
+  </div>
 
   <div id="app" hidden>
     <section id="todaySec" aria-labelledby="td-h" hidden style="margin-bottom:26px">
@@ -644,8 +690,7 @@ $('aiBtn').onclick=async()=>{
 };
 
 const CAT_LABELS={league:'Campionati',cup:'Coppe',nation:'Nazionali'};
-let CURCAT='league';
-function catOf(id){ if(id==='acc') return 'acc'; const l=LEAGUES.find(x=>x.id===id); return l?l.kind:CURCAT; }
+let CURCAT='league';function catOf(id){ if(id==='acc') return 'acc'; const l=LEAGUES.find(x=>x.id===id); return l?l.kind:CURCAT; }
 function renderCatTabs(){
   const cats=[...new Set(LEAGUES.map(l=>l.kind))].filter(k=>CAT_LABELS[k]);
   cats.sort((a,b)=>['league','cup','nation'].indexOf(a)-['league','cup','nation'].indexOf(b));
@@ -665,6 +710,108 @@ function renderSubTabs(selId){
   $('tabs').innerHTML=items.map(l=>`<button class="tab" role="tab" data-id="${esc(l.id)}" aria-selected="${l.id===selId}">${esc(l.name)}</button>`).join('');
   [...$('tabs').children].forEach(b=>b.onclick=()=>{ history.replaceState(null,'','#l='+b.dataset.id); loadLeague(b.dataset.id); });
 }
+
+/* ---------- tennis ---------- */
+let SPORT='football', TLIST=null, TCUR=null, TPLAYERS={}, TFIX=[], TPLAYED=[], TSTATE=null, TET=null;
+const T_H2C={};
+function tPct(x,d=0){ return pct(x,d); }
+function strength(p){ return p&&p.points?Math.log(p.points+50):(p&&p.rank?(2000-Math.min(p.rank,2000))/50+4:null); }
+function tennisAnalyze(pa,pb,extra){
+  const sa=strength(pa), sb=strength(pb);
+  let logit=(sa!=null&&sb!=null)?0.9*(sa-sb):0;
+  const parts=[];
+  if(sa==null||sb==null) parts.push('Uno dei due giocatori non è in classifica ATP/WTA: stima meno affidabile.');
+  const surf=extra.surface;
+  if(surf&&extra.surfA&&extra.surfB){
+    const rate=s=>{ const arr=s&&s[surf]; if(!arr) return null; const w=arr[0],l=arr[1]; return (w+l)>=3?w/(w+l):null; };
+    const ra=rate(extra.surfA), rb=rate(extra.surfB);
+    if(ra!=null&&rb!=null){ logit+=1.2*(ra-rb); const sn={hard:'cemento',clay:'terra rossa',grass:'erba'}[surf]||surf; parts.push(`Rendimento su ${sn} (ultime stagioni): ${pct(ra)} contro ${pct(rb)}.`); }
+  }
+  if(extra.formA&&extra.formB){ logit+=0.8*(extra.formA.rate-extra.formB.rate); parts.push(`Forma stagionale: ${pct(extra.formA.rate)} (${extra.formA.w}-${extra.formA.l}) contro ${pct(extra.formB.rate)} (${extra.formB.w}-${extra.formB.l}).`); }
+  if(extra.h2h&&extra.h2h.length){
+    const n=extra.h2h.length, wa=extra.h2h.filter(m=>m.aWon).length;
+    const w=Math.min(.6,n/10*.6); logit+=w*((wa/n)-0.5)*2;
+    parts.push(`Scontri diretti: ${wa} a ${n-wa} negli ultimi ${n} incontri.`);
+  } else parts.push('Nessuno scontro diretto recente disponibile.');
+  const p=1/(1+Math.exp(-logit));
+  return {pA:p,pB:1-p,why:parts};
+}
+function tRankLine(p){ return p?(p.rank?`#${p.rank} ATP/WTA (${p.points} punti)`:'Non in classifica'):'—'; }
+
+async function loadSports(){
+  if(TLIST) return;
+  $('tState').textContent='Carico i tornei...';
+  try{
+    const d=await getJSON('/api/tennis-leagues'); TLIST=d.tournaments;
+    if(!TLIST.length){ $('tState').textContent='Nessun torneo importante (Slam, Masters 1000/WTA 1000, Finals) nei prossimi giorni.'; $('tTabs').innerHTML=''; return; }
+    $('tTabs').innerHTML=TLIST.map((t,i)=>`<button class="tab" role="tab" data-i="${i}" aria-selected="false">${esc(t.name)}</button>`).join('');
+    [...$('tTabs').children].forEach(b=>b.onclick=()=>loadTournament(+b.dataset.i));
+    loadTournament(0);
+  }catch(e){ $('tState').textContent='Impossibile caricare i tornei: '+e.message; }
+}
+async function loadTournament(i){
+  const t=TLIST[i]; if(!t) return;
+  TCUR=i; [...$('tTabs').children].forEach((b,j)=>b.setAttribute('aria-selected',String(j===i)));
+  $('tContent').hidden=true; $('tState').textContent='Carico le partite di '+t.name+'...';
+  try{
+    const d=await getJSON('/api/tennis-tournament?id='+encodeURIComponent(t.id)+'&et='+encodeURIComponent(t.eventTypeKey)+'&surface='+encodeURIComponent(t.surface||''));
+    TPLAYERS={}; d.players.forEach(p=>{ TPLAYERS[p.id]=p; }); TFIX=d.fixtures; TPLAYED=d.played;
+    const opts=Object.values(TPLAYERS).sort((x,y)=>x.name.localeCompare(y.name,'it')).map(p=>`<option value="${p.id}">${esc(p.name)}${p.rank?' (#'+p.rank+')':''}</option>`).join('');
+    $('tSelA').innerHTML=opts; $('tSelB').innerHTML=opts;
+    const f0=TFIX[0];
+    TSTATE=f0?{a:f0.a,b:f0.b}:{a:Object.keys(TPLAYERS)[0],b:Object.keys(TPLAYERS)[1]};
+    $('notice').textContent=`${t.name}: dati API-Tennis aggiornati ora. Strumento di analisi, non di scommesse.`;
+    $('tState').textContent=''; $('tContent').hidden=false;
+    renderTFixtures(); await tUpdate();
+  }catch(e){ $('tState').textContent='Impossibile caricare il torneo: '+e.message; }
+}
+function renderTFixtures(){
+  if(!TFIX.length){ $('tfx').innerHTML='<p class="hint">Nessuna partita in programma trovata.</p>'; return; }
+  $('tfx').innerHTML=TFIX.map((f,i)=>{
+    const a=TPLAYERS[f.a],b=TPLAYERS[f.b]; if(!a||!b) return '';
+    const dt=new Date(f.date).toLocaleString('it-IT',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<button type="button" data-i="${i}" class="${TSTATE&&TSTATE.a===f.a&&TSTATE.b===f.b?'sel':''}" aria-label="Analizza ${esc(a.name)} contro ${esc(b.name)}"><div class="dt">${dt}${f.round?' · '+esc(f.round):''}</div><div class="nm"><span>${esc(a.name)}</span><span>${esc(b.name)}</span></div></button>`;
+  }).join('');
+  $('tfx').querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+    const f=TFIX[+b.dataset.i]; TSTATE={a:f.a,b:f.b}; await tUpdate(); $('tAnalysis').scrollIntoView({behavior:'smooth'});
+  });
+}
+async function tUpdate(){
+  const a=TPLAYERS[TSTATE.a], b=TPLAYERS[TSTATE.b]; if(!a||!b) return;
+  $('tSelA').value=a.id; $('tSelB').value=b.id;
+  $('tLA').textContent='Vince '+a.name; $('tLB').textContent='Vince '+b.name;
+  renderTFixtures();
+  $('tH2h').innerHTML='<p class="hint">Carico scontri diretti e statistiche...</p>';
+  const key=a.id+'-'+b.id; let extra=T_H2C[key];
+  if(!extra){
+    try{ extra=await getJSON('/api/tennis-h2h?a='+a.id+'&b='+b.id); T_H2C[key]=extra; }
+    catch(e){ $('tH2h').innerHTML=`<p class="hint">Scontri diretti non disponibili (${esc(e.message)}).</p>`; extra={matches:[],surfaceA:null,surfaceB:null,formA:null,formB:null}; }
+  }
+  const r=tennisAnalyze(a,b,{h2h:extra.matches,surfA:extra.surfaceA,surfB:extra.surfaceB,formA:extra.formA,formB:extra.formB,surface:(TLIST[TCUR]||{}).surface});
+  $('tBA').style.width=r.pA*100+'%'; $('tBB').style.width=r.pB*100+'%';
+  $('tNA').textContent=pct(r.pA); $('tNB').textContent=pct(r.pB);
+  const fav=r.pA>=r.pB?a.name:b.name, favp=Math.max(r.pA,r.pB);
+  $('tSummary').textContent=favp<.58?`Match equilibrato, nessuno dei due parte nettamente favorito.`:`${fav} parte favorito con il ${pct(favp)} di probabilità.`;
+  $('tWhy').innerHTML=r.why.map(t=>`<li>${esc(t)}</li>`).join('');
+  $('tFac').innerHTML=`<thead><tr><th></th><th>${esc(a.name)}</th><th>${esc(b.name)}</th></tr></thead><tbody>
+    <tr><td>Classifica</td><td>${tRankLine(a)}</td><td>${tRankLine(b)}</td></tr></tbody>`;
+  if(extra.matches&&extra.matches.length){
+    $('tH2h').innerHTML='<div class="tw"><table class="fac">'+extra.matches.map(m=>`<tr><td>${esc(m.date)}</td><td>${esc(m.tournament)}</td><td><b>${esc(m.result)}</b></td><td>${m.aWon?esc(a.name):esc(b.name)}</td></tr>`).join('')+'</table></div>';
+  } else if(!$('tH2h').textContent.includes('non disponibili')) $('tH2h').innerHTML='<p class="hint">Nessuno scontro diretto trovato.</p>';
+}
+$('tSelA').onchange=async e=>{ TSTATE.a=e.target.value; await tUpdate(); };
+$('tSelB').onchange=async e=>{ TSTATE.b=e.target.value; await tUpdate(); };
+$('tSwap').onclick=async()=>{ [TSTATE.a,TSTATE.b]=[TSTATE.b,TSTATE.a]; await tUpdate(); };
+
+[...$('sports').children].forEach(b=>b.onclick=()=>{
+  SPORT=b.dataset.sport;
+  [...$('sports').children].forEach(x=>x.setAttribute('aria-selected',String(x===b)));
+  const isT=SPORT==='tennis';
+  $('cats').hidden=isT; $('tabs').hidden=isT; $('app').hidden=isT||CUR==='acc'; $('accView').hidden=true;
+  $('tennisApp').hidden=!isT;
+  if(isT){ loadSports(); } else { $('notice').textContent=''; renderCatTabs(); }
+  try{ localStorage.setItem('pp_sport',SPORT); }catch(err){}
+});
 
 async function boot(){
   try{
