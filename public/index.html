@@ -181,7 +181,9 @@ table.sm th:first-child,table.sm td:first-child{text-align:left}
           <div class="num a"><div class="v" id="tNB">–</div><div class="l" id="tLB">Vince</div></div>
         </div>
         <p class="summary" id="tSummary"></p>
+        <div class="actions"><button class="btn" id="tAiBtn" type="button" hidden>Commento AI</button></div>
       </section>
+      <div class="panel ai" id="tAiBox" aria-live="polite" hidden style="margin:0 0 22px"></div>
       <div class="grid">
         <div class="panel" aria-labelledby="tw-h">
           <h2 id="tw-h">Cosa pesa sul risultato</h2>
@@ -673,17 +675,22 @@ $('share').onclick=shareImage;
 
 /* ---------- commento AI ---------- */
 const AIC={};
+function renderAiComment(j){
+  const src=(j.sources&&j.sources.length)?'<p class="hint">Fonti consultate: '+j.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(' · ')+'</p>':'';
+  return '<h2>Commento</h2>'+j.text.split(/\n+/).map(t=>`<p>${esc(t)}</p>`).join('')+src
+    +'<p class="hint">Testo generato da un\'AI a partire dai dati mostrati in pagina'+(j.searched?', integrati con una ricerca sul web':'')+': può contenere imprecisioni e non è un consiglio di giocata.</p>';
+}
 $('aiBtn').onclick=async()=>{
   const btn=$('aiBtn'), box=$('aiBox'); const r=analyze(S.home,S.away,opts(),F&&F.pred,$('useApi').checked);
   const absN=side=>{ const a=absOf(side); return a&&a.list?a.list.map(x=>x.name+(x.role?' ('+x.role+')':'')):[]; };
-  const body={league:D?D.league.name:'',home:S.home,away:S.away,pH:r.pH,pD:r.pD,pA:r.pA,o25:r.o25,btts:r.btts,lh:r.lh,la:r.la,top:`${r.top[0][0]}-${r.top[0][1]}`,rel:LASTREL?LASTREL.lv:'',formH:S.fH,formA:S.fA,absH:absN('h'),absA:absN('a'),cup:CUP,nation:NAT,why:whyList(r)};
+  const body={sport:'football',league:D?D.league.name:'',home:S.home,away:S.away,pH:r.pH,pD:r.pD,pA:r.pA,o25:r.o25,btts:r.btts,lh:r.lh,la:r.la,top:`${r.top[0][0]}-${r.top[0][1]}`,rel:LASTREL?LASTREL.lv:'',formH:S.fH,formA:S.fA,absH:absN('h'),absA:absN('a'),cup:CUP,nation:NAT,why:whyList(r)};
   const sig=JSON.stringify(body); box.hidden=false;
   if(AIC[sig]){ box.innerHTML=AIC[sig]; return; }
-  btn.disabled=true; box.innerHTML='<p class="hint">Sto scrivendo il commento...</p>';
+  btn.disabled=true; box.innerHTML='<p class="hint">Sto scrivendo il commento (posso cercare notizie recenti sul web)...</p>';
   try{
     const res=await fetch('/api/commento',{method:'POST',headers:{'Content-Type':'application/json'},body:sig}); const j=await res.json();
     if(!res.ok) throw new Error(j.error||('Errore '+res.status));
-    const html='<h2>Commento</h2>'+j.text.split(/\n+/).map(t=>`<p>${esc(t)}</p>`).join('')+'<p class="hint">Testo generato da un\'AI a partire dai dati mostrati in pagina: può contenere imprecisioni e non è un consiglio di giocata.</p>';
+    const html=renderAiComment(j);
     AIC[sig]=html; box.innerHTML=html;
   }catch(e){ box.innerHTML=`<p class="hint">Commento non disponibile: ${esc(e.message)}</p>`; }
   btn.disabled=false;
@@ -778,6 +785,7 @@ function renderTFixtures(){
 }
 async function tUpdate(){
   const a=TPLAYERS[TSTATE.a], b=TPLAYERS[TSTATE.b]; if(!a||!b) return;
+  $('tAiBox').hidden=true;
   $('tSelA').value=a.id; $('tSelB').value=b.id;
   $('tLA').textContent='Vince '+a.name; $('tLB').textContent='Vince '+b.name;
   renderTFixtures();
@@ -802,6 +810,22 @@ async function tUpdate(){
 $('tSelA').onchange=async e=>{ TSTATE.a=e.target.value; await tUpdate(); };
 $('tSelB').onchange=async e=>{ TSTATE.b=e.target.value; await tUpdate(); };
 $('tSwap').onclick=async()=>{ [TSTATE.a,TSTATE.b]=[TSTATE.b,TSTATE.a]; await tUpdate(); };
+$('tAiBtn').onclick=async()=>{
+  const btn=$('tAiBtn'), box=$('tAiBox'); const a=TPLAYERS[TSTATE.a], b=TPLAYERS[TSTATE.b]; if(!a||!b) return;
+  const extra=T_H2C[a.id+'-'+b.id]||{matches:[]};
+  const r=tennisAnalyze(a,b,{h2h:extra.matches,surfA:extra.surfaceA,surfB:extra.surfaceB,formA:extra.formA,formB:extra.formB,surface:(TLIST[TCUR]||{}).surface});
+  const h2hTxt=extra.matches&&extra.matches.length?`${extra.matches.filter(m=>m.aWon).length} a ${extra.matches.length-extra.matches.filter(m=>m.aWon).length} negli ultimi ${extra.matches.length} incontri`:'';
+  const body={sport:'tennis',tournament:(TLIST[TCUR]||{}).name||'',surface:(TLIST[TCUR]||{}).surface||'',a:a.name,b:b.name,pA:r.pA,pB:r.pB,rankA:tRankLine(a),rankB:tRankLine(b),h2h:h2hTxt,why:r.why};
+  const sig=JSON.stringify(body); box.hidden=false;
+  if(AIC[sig]){ box.innerHTML=AIC[sig]; return; }
+  btn.disabled=true; box.innerHTML='<p class="hint">Sto scrivendo il commento (posso cercare notizie recenti sul web)...</p>';
+  try{
+    const res=await fetch('/api/commento',{method:'POST',headers:{'Content-Type':'application/json'},body:sig}); const j=await res.json();
+    if(!res.ok) throw new Error(j.error||('Errore '+res.status));
+    const html=renderAiComment(j); AIC[sig]=html; box.innerHTML=html;
+  }catch(e){ box.innerHTML=`<p class="hint">Commento non disponibile: ${esc(e.message)}</p>`; }
+  btn.disabled=false;
+};
 
 [...$('sports').children].forEach(b=>b.onclick=()=>{
   SPORT=b.dataset.sport;
@@ -815,7 +839,7 @@ $('tSwap').onclick=async()=>{ [TSTATE.a,TSTATE.b]=[TSTATE.b,TSTATE.a]; await tUp
 
 async function boot(){
   try{
-    const d=await getJSON('/api/leagues'); LEAGUES=d.leagues; FEAT=d.features||FEAT; $('aiBtn').hidden=!FEAT.ai;
+    const d=await getJSON('/api/leagues'); LEAGUES=d.leagues; FEAT=d.features||FEAT; $('aiBtn').hidden=!FEAT.ai; $('tAiBtn').hidden=!FEAT.ai;
     renderCatTabs();
     const p=new URLSearchParams(location.hash.slice(1)); let saved=''; try{ saved=localStorage.getItem('pp_league')||''; }catch(e){}
     const id=LEAGUES.some(l=>l.id===p.get('l'))?p.get('l'):LEAGUES.some(l=>l.id===saved)?saved:LEAGUES[0].id;
