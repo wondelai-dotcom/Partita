@@ -84,13 +84,8 @@ module.exports = async (req, res) => {
     // Senza Redis non possiamo applicare limiti affidabili fra istanze serverless: fail closed.
     if (!hasRedis()) return res.status(503).json({ error: 'Commenti AI temporaneamente non disponibili: protezione costi non configurata' });
 
-    // La cache viene controllata prima dei contatori: una risposta già pagata non consuma nuova quota.
-    const sig = crypto.createHash('sha1').update(JSON.stringify(d)).digest('hex');
-    const cacheKey = 'ai:txt:' + sig;
-    const cached = await redis(['GET', cacheKey]);
-    if (cached) return res.status(200).json(JSON.parse(cached));
-
-    // Limite per IP su finestra di un minuto + tetto globale giornaliero.
+    // Limite per IP prima della cache: anche le richieste ripetute non devono poter
+    // martellare Redis senza limite. Le risposte in cache non consumano la quota AI globale.
     const minute = Math.floor(Date.now() / 60000);
     const ipCounter = await incrementWindow('ai:ip:' + clientKey(req) + ':' + minute, 90);
     if (ipCounter > perIpLimit()) {
@@ -98,6 +93,12 @@ module.exports = async (req, res) => {
       return res.status(429).json({ error: 'Troppe richieste AI. Riprova tra un minuto.' });
     }
 
+    const sig = crypto.createHash('sha1').update(JSON.stringify(d)).digest('hex');
+    const cacheKey = 'ai:txt:' + sig;
+    const cached = await redis(['GET', cacheKey]);
+    if (cached) return res.status(200).json(JSON.parse(cached));
+
+    // Tetto giornaliero globale sulle sole generazioni non già in cache.
     const day = new Date().toISOString().slice(0, 10), ckey = 'ai:count:' + day;
     const n = await incrementWindow(ckey, 172800);
     if (n > cap()) return res.status(429).json({ error: 'Limite giornaliero di commenti raggiunto: riprova domani' });
