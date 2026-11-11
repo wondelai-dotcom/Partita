@@ -5,9 +5,22 @@ const crypto = require('crypto');
 const { hasRedis, redis } = require('./_common');
 
 const MODEL = 'claude-haiku-4-5-20251001';
-const cap = () => parseInt(process.env.AI_DAILY_CAP || '150', 10);
-const maxSearches = () => parseInt(process.env.AI_MAX_SEARCHES || '4', 10);
-let localCount = { day: '', n: 0 };
+const cap = () => Math.max(1, parseInt(process.env.AI_DAILY_CAP || '150', 10) || 150);
+const maxSearches = () => Math.max(0, Math.min(4, parseInt(process.env.AI_MAX_SEARCHES || '4', 10) || 4));
+const perIpLimit = () => Math.max(1, parseInt(process.env.AI_IP_PER_MINUTE || '6', 10) || 6);
+
+// Vercel valorizza x-forwarded-for. L'indirizzo viene hashato: non salviamo IP in chiaro in Redis.
+function clientKey(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = forwarded || String(req.headers['x-real-ip'] || '').trim() || 'unknown';
+  return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 32);
+}
+
+async function incrementWindow(key, seconds) {
+  const n = Number(await redis(['INCR', key]));
+  if (n === 1) await redis(['EXPIRE', key, seconds]);
+  return n;
+}
 
 const str = (v, max = 40) => String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').slice(0, max);
 const pc = v => Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * 100);
@@ -60,25 +73,34 @@ module.exports = async (req, res) => {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(501).json({ error: 'Commenti AI non attivi' });
   try {
+    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+    if (rawBody.length > 12000) return res.status(413).json({ error: 'Richiesta troppo grande' });
     const b = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return res.status(400).json({ error: 'Formato della richiesta non valido' });
     const built = b.sport === 'tennis' ? buildTennis(b) : buildFootball(b);
     if (!built) return res.status(400).json({ error: 'Dati mancanti' });
     const { d, system, user } = built;
 
-    // limite giornaliero per tenere sotto controllo i costi (ogni commento può includere più ricerche sul web)
-    const day = new Date().toISOString().slice(0, 10), ckey = 'ai:count:' + day;
-    if (hasRedis()) {
-      const n = await redis(['INCR', ckey]);
-      if (n === 1) await redis(['EXPIRE', ckey, 172800]);
-      if (n > cap()) return res.status(429).json({ error: 'Limite giornaliero di commenti raggiunto: riprova domani' });
-    } else {
-      if (localCount.day !== day) localCount = { day, n: 0 };
-      if (++localCount.n > cap()) return res.status(429).json({ error: 'Limite giornaliero di commenti raggiunto: riprova domani' });
-    }
-    // stessa partita e stessi numeri = stesso commento, senza nuova spesa (niente ricerche ripetute)
+    // Senza Redis non possiamo applicare limiti affidabili fra istanze serverless: fail closed.
+    if (!hasRedis()) return res.status(503).json({ error: 'Commenti AI temporaneamente non disponibili: protezione costi non configurata' });
+
+    // La cache viene controllata prima dei contatori: una risposta già pagata non consuma nuova quota.
     const sig = crypto.createHash('sha1').update(JSON.stringify(d)).digest('hex');
     const cacheKey = 'ai:txt:' + sig;
-    if (hasRedis()) { const c = await redis(['GET', cacheKey]); if (c) return res.status(200).json(JSON.parse(c)); }
+    const cached = await redis(['GET', cacheKey]);
+    if (cached) return res.status(200).json(JSON.parse(cached));
+
+    // Limite per IP su finestra di un minuto + tetto globale giornaliero.
+    const minute = Math.floor(Date.now() / 60000);
+    const ipCounter = await incrementWindow('ai:ip:' + clientKey(req) + ':' + minute, 90);
+    if (ipCounter > perIpLimit()) {
+      res.setHeader('Retry-After', '60');
+      return res.status(429).json({ error: 'Troppe richieste AI. Riprova tra un minuto.' });
+    }
+
+    const day = new Date().toISOString().slice(0, 10), ckey = 'ai:count:' + day;
+    const n = await incrementWindow(ckey, 172800);
+    if (n > cap()) return res.status(429).json({ error: 'Limite giornaliero di commenti raggiunto: riprova domani' });
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -99,7 +121,7 @@ module.exports = async (req, res) => {
     }));
     const searched = !!(j.usage && j.usage.server_tool_use && j.usage.server_tool_use.web_search_requests);
     const payload = { text, sources: sources.slice(0, 6), searched };
-    if (hasRedis()) await redis(['SET', cacheKey, JSON.stringify(payload), 'EX', 21600]);
+    await redis(['SET', cacheKey, JSON.stringify(payload), 'EX', 21600]);
     res.status(200).json(payload);
   } catch (e) {
     res.status(500).json({ error: e.message });
