@@ -51,3 +51,9 @@ Il commento può cercare da solo notizie recenti sul web (infortuni dell'ultima 
 - Le nazionali vengono scoperte automaticamente cercando il nome della competizione fra tutte quelle del tuo piano APIfootball (qualificazioni Mondiali/Europei, Nations League, amichevoli, tornei finali); ne compaiono al massimo 10 schede, con priorità a UEFA/Europa. Non usano una classifica di campionato: i valori vengono solo dalle ultime partite di ciascuna nazionale (fino a 18 mesi indietro), quindi sono meno solidi, specie per le squadre che giocano poco.
 - Non è un vero punteggio Elo: quello richiede lo storico di più stagioni.
 - Nessun modello elimina l'imprevedibilità del calcio. L'indicatore di affidabilità misura la qualità dei dati, non la certezza dell'esito.
+
+## Verifica della configurazione
+
+L'endpoint `GET /api/health` restituisce solo lo stato di presenza delle variabili necessarie (mai i valori segreti). Il campo `footballProviderKeyPresent` indica soltanto che `APIFOOTBALL_KEY` è impostata: non prova che la chiave sia valida, non scaduta o entro quota. Lo stesso vale per il tennis e gli altri servizi.
+
+Un rilascio è da considerare operativo solo dopo aver completato smoke test reali degli endpoint calcio e tennis, verifica del cron e del database Redis, oltre ai controlli automatici della pipeline GitHub Actions. L'assenza di una chiave non deve essere compensata inventando risultati o statistiche.
