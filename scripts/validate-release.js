@@ -38,7 +38,7 @@ for (const file of fs.readdirSync(apiDir).filter(name => name.endsWith('.js'))) 
 parseJavaScript(read('public/model.js'), 'public/model.js');
 
 const html = read('public/index.html');
-const inlineScripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+const inlineScripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
 assert(inlineScripts.length > 0, 'Nessuno script inline trovato in public/index.html');
 inlineScripts.forEach((match, index) => {
   const source = match[1].trim();
@@ -56,6 +56,6 @@ assert(ai.includes('AI_DAILY_CAP') && ai.includes('AI_IP_PER_MINUTE'), 'Limiti A
 
 const health = read('api/health.js');
 assert(!health.includes('process.env.APIFOOTBALL_KEY ||'), 'Health endpoint non deve restituire segreti');
-assert(health.includes('services'), 'Health endpoint non espone lo stato dei servizi');
+assert(health.includes('footballProviderKeyPresent') && health.includes('configuration'), 'Health endpoint non espone lo stato delle configurazioni');
 
 console.log('Release checks passed: required files, Vercel config, security headers, API syntax, browser script syntax, cron and AI guards.');
