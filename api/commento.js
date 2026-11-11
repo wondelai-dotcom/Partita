@@ -6,7 +6,7 @@ const { hasRedis, redis } = require('./_common');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const cap = () => Math.max(1, parseInt(process.env.AI_DAILY_CAP || '150', 10) || 150);
-const maxSearches = () => Math.max(0, Math.min(4, parseInt(process.env.AI_MAX_SEARCHES || '4', 10) || 4));
+const maxSearches = () => { const n = Number.parseInt(process.env.AI_MAX_SEARCHES ?? '4', 10); return Number.isFinite(n) ? Math.max(0, Math.min(4, n)) : 4; };
 const perIpLimit = () => Math.max(1, parseInt(process.env.AI_IP_PER_MINUTE || '6', 10) || 6);
 
 // Vercel valorizza x-forwarded-for. L'indirizzo viene hashato: non salviamo IP in chiaro in Redis.
@@ -125,6 +125,8 @@ module.exports = async (req, res) => {
     await redis(['SET', cacheKey, JSON.stringify(payload), 'EX', 21600]);
     res.status(200).json(payload);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    // Non esporre al client dettagli di provider, URL o configurazione interna.
+    console.error('[commento] request failed:', e && e.message ? e.message : 'unknown error');
+    res.status(500).json({ error: 'Errore temporaneo durante la generazione del commento' });
   }
 };
