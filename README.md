@@ -24,10 +24,11 @@ Basta la variabile `APIFOOTBALL_KEY` su Vercel. Campionati, coppe, assenti pesat
 
 ## Attivare il commento AI
 1. Crea un account su console.anthropic.com, aggiungi un piccolo credito e genera una chiave API.
-2. Su Vercel aggiungi la variabile `ANTHROPIC_API_KEY`. Facoltativo: `AI_DAILY_CAP` per il numero massimo di commenti al giorno (predefinito 150).
-3. Fai **Redeploy**. Compare il pulsante "Commento AI" sia nel calcio sia nel tennis. Il commento si genera solo quando lo chiedi, con un modello economico, e viene salvato per non pagare due volte la stessa partita.
+2. Collega Upstash Redis al progetto Vercel: è necessario per i limiti di spesa e di frequenza condivisi fra le istanze serverless. Verifica che siano presenti `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN` (oppure le equivalenti `KV_REST_API_URL` e `KV_REST_API_TOKEN`).
+3. Su Vercel aggiungi `ANTHROPIC_API_KEY`. Facoltative: `AI_DAILY_CAP` (predefinito 150 commenti al giorno), `AI_IP_PER_MINUTE` (predefinito 6 richieste al minuto per IP) e `AI_MAX_SEARCHES` (predefinito 4 ricerche web per commento, massimo 4).
+4. Fai **Redeploy**. Compare il pulsante "Commento AI" sia nel calcio sia nel tennis. Se Redis non è configurato o non è raggiungibile, il servizio AI rifiuta le richieste invece di funzionare senza protezioni affidabili.
 
-Il commento può cercare da solo notizie recenti sul web (infortuni dell'ultima ora, formazioni, dichiarazioni) prima di scrivere, usando la funzione di ricerca integrata nell'API di Claude. Questo ha un costo aggiuntivo: 10 dollari ogni 1.000 ricerche, oltre al normale costo del testo. Ogni commento può fare fino a 4 ricerche (regolabile con la variabile `AI_MAX_SEARCHES`); il limite giornaliero di commenti (`AI_DAILY_CAP`) resta la protezione principale contro una spesa eccessiva. Quando il modello ha cercato sul web, le fonti compaiono come link sotto il commento.
+Il commento può cercare da solo notizie recenti sul web (infortuni dell'ultima ora, formazioni, dichiarazioni) prima di scrivere, usando la funzione di ricerca integrata nell'API di Claude. Questo ha un costo aggiuntivo oltre al normale costo del testo. Il limite per IP e il tetto giornaliero globale servono a ridurre il rischio di abuso; non sostituiscono il monitoraggio dei consumi Anthropic. Le risposte già in cache vengono restituite senza consumare una nuova quota. Quando il modello ha cercato sul web, le fonti compaiono come link sotto il commento.
 
 ## File
 - `public/index.html`, `public/model.js`: sito e modello statistico (lo stesso codice gira anche sul server)
@@ -50,3 +51,9 @@ Il commento può cercare da solo notizie recenti sul web (infortuni dell'ultima 
 - Le nazionali vengono scoperte automaticamente cercando il nome della competizione fra tutte quelle del tuo piano APIfootball (qualificazioni Mondiali/Europei, Nations League, amichevoli, tornei finali); ne compaiono al massimo 10 schede, con priorità a UEFA/Europa. Non usano una classifica di campionato: i valori vengono solo dalle ultime partite di ciascuna nazionale (fino a 18 mesi indietro), quindi sono meno solidi, specie per le squadre che giocano poco.
 - Non è un vero punteggio Elo: quello richiede lo storico di più stagioni.
 - Nessun modello elimina l'imprevedibilità del calcio. L'indicatore di affidabilità misura la qualità dei dati, non la certezza dell'esito.
+
+## Verifica della configurazione
+
+L'endpoint `GET /api/health` restituisce solo lo stato di presenza delle variabili necessarie (mai i valori segreti). Il campo `footballProviderKeyPresent` indica soltanto che `APIFOOTBALL_KEY` è impostata: non prova che la chiave sia valida, non scaduta o entro quota. Lo stesso vale per il tennis e gli altri servizi.
+
+Un rilascio è da considerare operativo solo dopo aver completato smoke test reali degli endpoint calcio e tennis, verifica del cron e del database Redis, oltre ai controlli automatici della pipeline GitHub Actions. L'assenza di una chiave non deve essere compensata inventando risultati o statistiche.
