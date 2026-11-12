@@ -38,7 +38,7 @@ for (const file of fs.readdirSync(apiDir).filter(name => name.endsWith('.js'))) 
 parseJavaScript(read('public/model.js'), 'public/model.js');
 
 const html = read('public/index.html');
-const inlineScripts = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
+const inlineScripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 assert(inlineScripts.length > 0, 'Nessuno script inline trovato in public/index.html');
 inlineScripts.forEach((match, index) => {
   const source = match[1].trim();
